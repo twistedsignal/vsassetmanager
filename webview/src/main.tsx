@@ -1,99 +1,744 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AssetSummary, CreatorTarget, ExtensionState, HostMessage, UploadCandidate, WebviewMessage } from "../../src/model";
+import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
+import {
+  Archive as ArchiveIcon,
+  ArrowClockwise,
+  CaretDown,
+  CaretRight,
+  Check,
+  CloudArrowUp,
+  Copy,
+  DotsThree,
+  FileAudio,
+  FileImage,
+  FileVideo,
+  FolderSimple,
+  MagnifyingGlass,
+  Package,
+  Plus,
+  Queue,
+  Rows,
+  SlidersHorizontal,
+  User,
+  Users,
+  X,
+} from "@phosphor-icons/react";
+import type {
+  AssetSummary,
+  CreatorTarget,
+  ExtensionState,
+  HostMessage,
+  UploadCandidate,
+  WebviewMessage,
+} from "../../src/model";
 import "./style.css";
 
-declare function acquireVsCodeApi<T = unknown>(): { postMessage(message: WebviewMessage): void; getState(): T; setState(value: T): void };
+declare function acquireVsCodeApi<T = unknown>(): { postMessage(message: WebviewMessage): void };
 const vscode = acquireVsCodeApi();
-const empty: ExtensionState = { configured: false, profiles: [], history: [], inventory: [], jobs: [], loading: false, isRojoProject: false };
+const empty: ExtensionState = {
+  configured: false,
+  profiles: [],
+  history: [],
+  inventory: [],
+  jobs: [],
+  loading: false,
+  isRojoProject: false,
+};
+type Folder = "all" | "images" | "audio" | "models" | "animations" | "video" | "archived";
+const folders: Array<{ id: Folder; label: string }> = [
+  { id: "all", label: "All assets" },
+  { id: "images", label: "Images" },
+  { id: "audio", label: "Audio" },
+  { id: "models", label: "Models" },
+  { id: "animations", label: "Animations" },
+  { id: "video", label: "Video" },
+  { id: "archived", label: "Archived" },
+];
 
 function App() {
-  const [state, setState] = useState(empty);
-  const [tab, setTab] = useState<"history" | "inventory" | "archived" | "queue">("history");
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [candidates, setCandidates] = useState<UploadCandidate[]>();
-  const [details, setDetails] = useState<AssetSummary>();
-  const [versions, setVersions] = useState<unknown[]>();
-  const [notice, setNotice] = useState<string>();
-
+  const [state, setState] = useState(empty),
+    [creatorKey, setCreatorKey] = useState(""),
+    [folder, setFolder] = useState<Folder>("all"),
+    [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set()),
+    [candidates, setCandidates] = useState<UploadCandidate[]>(),
+    [details, setDetails] = useState<AssetSummary>(),
+    [versions, setVersions] = useState<unknown[]>(),
+    [notice, setNotice] = useState<string>(),
+    [queueOpen, setQueueOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const listener = (event: MessageEvent<HostMessage>) => {
-      const message = event.data;
-      if (message.type === "state") setState(message.state);
-      else if (message.type === "candidates") setCandidates(message.candidates);
-      else if (message.type === "assetDetails") setDetails(message.asset);
-      else if (message.type === "assetVersions") setVersions(message.versions);
-      else if (message.type === "notice") { setNotice(message.message); window.setTimeout(() => setNotice(undefined), 6000); }
+      const m = event.data;
+      if (m.type === "state") setState(m.state);
+      else if (m.type === "candidates") setCandidates(m.candidates);
+      else if (m.type === "assetDetails") setDetails(m.asset);
+      else if (m.type === "assetVersions") setVersions(m.versions);
+      else if (m.type === "notice") {
+        setNotice(m.message);
+        window.setTimeout(() => setNotice(undefined), 5000);
+      }
     };
     window.addEventListener("message", listener);
     vscode.postMessage({ type: "ready" });
     return () => window.removeEventListener("message", listener);
   }, []);
-
-  const assets = tab === "inventory" ? state.inventory : tab === "archived" ? state.history.filter(asset => asset.archived) : state.history.filter(asset => !asset.archived);
-  const shown = useMemo(() => assets.filter(asset => `${asset.displayName} ${asset.assetId} ${asset.assetType}`.toLowerCase().includes(query.toLowerCase())), [assets, query]);
-  const toggle = (id: string) => setSelected(current => { const next = new Set(current); next.has(id) ? next.delete(id) : next.add(id); return next; });
-
-  if (!state.configured) return <Welcome rojo={state.isRojoProject} />;
-  return <main>
-    <header>
-      <div><p className="eyebrow">{state.isRojoProject ? "Rojo project" : "Roblox workspace"}</p><h1>Assets</h1></div>
-      <div className="header-actions"><button className="quiet" onClick={() => vscode.postMessage({ type: "switchProfile" })}>{state.profile?.label}</button><button onClick={() => vscode.postMessage({ type: "pickFiles" })}>Upload</button></div>
-    </header>
-    <nav aria-label="Asset sections">
-      <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>My uploads <span>{state.history.length}</span></button>
-      <button className={tab === "inventory" ? "active" : ""} onClick={() => setTab("inventory")}>Inventory <span>{state.inventory.length}</span></button>
-      <button className={tab === "archived" ? "active" : ""} onClick={() => setTab("archived")}>Archived <span>{state.history.filter(asset => asset.archived).length}</span></button>
-      <button className={tab === "queue" ? "active" : ""} onClick={() => setTab("queue")}>Queue <span>{state.jobs.filter(j => j.status !== "done").length}</span></button>
-    </nav>
-    {tab !== "queue" && <section className="toolbar"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search name, ID, or type" aria-label="Search assets"/><button className="icon" title="Refresh" onClick={() => vscode.postMessage({ type: "refresh" })}>↻</button></section>}
-    {selected.size > 0 && <div className="selection"><span>{selected.size} selected</span><button onClick={() => vscode.postMessage({ type: "copy", ids: [...selected] })}>Copy IDs</button><button className="quiet" onClick={() => setSelected(new Set())}>Clear</button></div>}
-    {state.loading && <div className="progress" />}
-    {state.error && <p className="error">{state.error}</p>}
-    {tab === "queue" ? <Queue state={state} /> : shown.length ? <div className="grid">{shown.map(asset => <AssetCard key={`${asset.source}-${asset.assetId}`} asset={asset} selected={selected.has(asset.assetId)} onToggle={() => toggle(asset.assetId)} onDetails={() => { setDetails(asset); setVersions(undefined); vscode.postMessage({ type: "details", assetId: asset.assetId }); }}/>)}</div> : <Empty tab={tab} onUpload={() => vscode.postMessage({ type: "pickFiles" })}/>} 
-    {tab === "inventory" && state.inventoryNextPageToken && <button className="load" onClick={() => vscode.postMessage({ type: "loadMore" })}>Load more</button>}
-    {candidates && <UploadReview candidates={candidates} creators={state.profile?.creators ?? []} onClose={() => setCandidates(undefined)} onSubmit={(items, creator) => { vscode.postMessage({ type: "submitUpload", candidates: items, creator }); setCandidates(undefined); setTab("queue"); }}/>} 
-    {details && <Details asset={details} versions={versions} onClose={() => { setDetails(undefined); setVersions(undefined); }}/>} 
-    {notice && <div className="toast" role="alert">{notice}</div>}
-  </main>;
+  const creators = state.profile?.creators ?? [],
+    activeCreator = creators.find((c) => keyFor(c) === creatorKey) ?? creators[0];
+  useEffect(() => {
+    if (!creatorKey && creators[0]) setCreatorKey(keyFor(creators[0]));
+  }, [creatorKey, creators]);
+  const repositoryAssets = useMemo(() => {
+    if (!activeCreator) return [];
+    const history = state.history.filter((a) => sameCreator(a.creator, activeCreator));
+    const inventory =
+      activeCreator.kind === "user" && activeCreator.id === state.profile?.userId
+        ? state.inventory.map((a) => ({ ...a, creator: activeCreator }))
+        : [];
+    const merged = new Map<string, AssetSummary>(inventory.map((a) => [a.assetId, a]));
+    for (const asset of history) merged.set(asset.assetId, asset);
+    return [...merged.values()];
+  }, [activeCreator, state.history, state.inventory, state.profile?.userId]);
+  const shown = useMemo(
+    () =>
+      repositoryAssets.filter((asset) => {
+        const matchesFolder =
+          folder === "archived" ? asset.archived : !asset.archived && inFolder(asset, folder);
+        return (
+          matchesFolder &&
+          `${asset.displayName} ${asset.assetId} ${asset.assetType}`
+            .toLowerCase()
+            .includes(query.trim().toLowerCase())
+        );
+      }),
+    [repositoryAssets, folder, query],
+  );
+  useGSAP(
+    () => {
+      if (listRef.current)
+        gsap.fromTo(
+          listRef.current.querySelectorAll(".asset-row"),
+          { opacity: 0, y: 8 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.28,
+            stagger: 0.025,
+            ease: "power2.out",
+            clearProps: "all",
+          },
+        );
+    },
+    { scope: listRef, dependencies: [creatorKey, folder, query, shown.length] },
+  );
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  if (!state.configured) return <Welcome />;
+  return (
+    <main className="app-shell">
+      <aside className="repo-sidebar">
+        <div className="repo-head">
+          <strong>Creators</strong>
+          <button
+            className="icon-button"
+            title="Manage creators"
+            onClick={() => vscode.postMessage({ type: "manageCreators" })}
+          >
+            <Plus size={15} weight="bold" />
+          </button>
+        </div>
+        <div className="repo-tree">
+          {creators.map((creator) => {
+            const active = activeCreator && keyFor(activeCreator) === keyFor(creator);
+            const count =
+              state.history.filter((a) => sameCreator(a.creator, creator) && !a.archived).length +
+              (creator.kind === "user" && creator.id === state.profile?.userId
+                ? state.inventory.length
+                : 0);
+            return (
+              <div key={keyFor(creator)}>
+                <button
+                  className={`repo ${active ? "active" : ""}`}
+                  onClick={() => {
+                    setCreatorKey(keyFor(creator));
+                    setFolder("all");
+                    setSelected(new Set());
+                  }}
+                >
+                  {active ? (
+                    <CaretDown size={13} weight="bold" />
+                  ) : (
+                    <CaretRight size={13} weight="bold" />
+                  )}
+                  {creator.kind === "group" ? (
+                    <Users size={16} weight="fill" />
+                  ) : (
+                    <User size={16} weight="fill" />
+                  )}
+                  <span>{creator.label}</span>
+                  <small>{count}</small>
+                </button>
+                {active && (
+                  <div className="folder-tree">
+                    {folders.map((item) => (
+                      <button
+                        key={item.id}
+                        className={folder === item.id ? "active" : ""}
+                        onClick={() => {
+                          setFolder(item.id);
+                          setSelected(new Set());
+                        }}
+                      >
+                        <FolderSimple size={14} weight={folder === item.id ? "fill" : "regular"} />
+                        <span>{item.label}</span>
+                        <small>{countFolder(repositoryAssets, item.id)}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <button className="account" onClick={() => vscode.postMessage({ type: "switchProfile" })}>
+          <SlidersHorizontal size={15} />
+          <span>{state.profile?.label}</span>
+        </button>
+      </aside>
+      <section className="content">
+        <header className="command-bar">
+          <div className="repo-title">
+            {activeCreator?.kind === "group" ? (
+              <Users size={17} weight="fill" />
+            ) : (
+              <User size={17} weight="fill" />
+            )}
+            <strong>{activeCreator?.label ?? "Assets"}</strong>
+            <span>/</span>
+            <span>{folders.find((item) => item.id === folder)?.label}</span>
+          </div>
+          <div className="commands">
+            <button
+              className="secondary"
+              onClick={() => vscode.postMessage({ type: "addExistingIds", creator: activeCreator })}
+            >
+              <Plus size={15} weight="bold" />
+              Add IDs
+            </button>
+            <button onClick={() => vscode.postMessage({ type: "pickFiles" })}>
+              <CloudArrowUp size={16} weight="bold" />
+              Upload
+            </button>
+          </div>
+        </header>
+        <div className="filter-bar">
+          <label className="search">
+            <MagnifyingGlass size={16} />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter assets"
+              aria-label="Filter assets"
+            />
+          </label>
+          <button
+            className="icon-button"
+            title="Refresh"
+            onClick={() => vscode.postMessage({ type: "refresh" })}
+          >
+            <ArrowClockwise size={16} weight="bold" />
+          </button>
+          <button
+            className={`icon-button ${queueOpen ? "active" : ""}`}
+            title="Upload queue"
+            onClick={() => setQueueOpen((v) => !v)}
+          >
+            <Queue size={17} weight="bold" />
+            {state.jobs.some((j) => j.status === "uploading" || j.status === "processing") && <i />}
+          </button>
+        </div>
+        {selected.size > 0 && (
+          <div className="selection-bar">
+            <span>{selected.size} selected</span>
+            <button
+              className="secondary"
+              onClick={() => vscode.postMessage({ type: "copy", ids: [...selected] })}
+            >
+              <Copy size={15} />
+              Copy IDs
+            </button>
+            <button className="icon-button" title="Clear" onClick={() => setSelected(new Set())}>
+              <X size={15} />
+            </button>
+          </div>
+        )}
+        {state.loading && <div className="loading-line" />}
+        {state.error && <div className="inline-error">{state.error}</div>}
+        <div className="asset-list" ref={listRef}>
+          <div className="list-head">
+            <span>Name</span>
+            <span>Type</span>
+            <span>ID</span>
+            <span />
+          </div>
+          {shown.map((asset) => (
+            <AssetRow
+              key={asset.assetId}
+              asset={asset}
+              selected={selected.has(asset.assetId)}
+              onToggle={() => toggle(asset.assetId)}
+              onOpen={() => {
+                setDetails(asset);
+                setVersions(undefined);
+                vscode.postMessage({ type: "details", assetId: asset.assetId });
+              }}
+            />
+          ))}
+          {!shown.length && <Empty folder={folder} hasAssets={repositoryAssets.length > 0} />}
+        </div>
+        {activeCreator?.kind === "user" && state.inventoryNextPageToken && (
+          <button className="load-more" onClick={() => vscode.postMessage({ type: "loadMore" })}>
+            Load more inventory
+          </button>
+        )}
+      </section>
+      {queueOpen && <QueuePanel state={state} onClose={() => setQueueOpen(false)} />}{" "}
+      {candidates && (
+        <UploadReview
+          candidates={candidates}
+          creators={creators}
+          initialCreator={activeCreator}
+          onClose={() => setCandidates(undefined)}
+          onSubmit={(items, creator) => {
+            vscode.postMessage({ type: "submitUpload", candidates: items, creator });
+            setCandidates(undefined);
+            setQueueOpen(true);
+          }}
+        />
+      )}{" "}
+      {details && (
+        <Details
+          asset={details}
+          versions={versions}
+          onClose={() => {
+            setDetails(undefined);
+            setVersions(undefined);
+          }}
+        />
+      )}{" "}
+      {notice && (
+        <div className="toast" role="alert">
+          {notice}
+        </div>
+      )}
+    </main>
+  );
 }
 
-function Welcome({ rojo }: { rojo: boolean }) { return <main className="welcome"><div className="mark">◇</div><p className="eyebrow">{rojo ? "Rojo project detected" : "Roblox Open Cloud"}</p><h1>Your assets, inside VS Code.</h1><p>Browse your inventory, bulk upload files, and copy usable asset IDs without bouncing through Studio.</p><button onClick={() => vscode.postMessage({ type: "configure" })}>Configure API key</button><a href="https://create.roblox.com/dashboard/credentials">Create a key on Roblox ↗</a><small>Keys stay in VS Code SecretStorage and never enter the webview.</small></main> }
-
-function Empty({ tab, onUpload }: { tab: string; onUpload(): void }) { return <div className="empty"><h2>{tab === "history" ? "No tracked uploads yet" : tab === "archived" ? "No archived assets" : "No inventory items found"}</h2><p>{tab === "history" ? "Assets uploaded here will remain indexed across projects." : tab === "archived" ? "Archived uploads will appear here and can be restored." : "Check the API key's inventory scope, or refresh the library."}</p>{tab === "history" && <button onClick={onUpload}>Choose files</button>}</div> }
-
-function AssetCard({ asset, selected, onToggle, onDetails }: { asset: AssetSummary; selected: boolean; onToggle(): void; onDetails(): void }) { return <article className={selected ? "card selected" : "card"}>
-  <button className="preview" onClick={onDetails} aria-label={`Open ${asset.displayName}`}><div className="thumb">{asset.thumbnailUrl ? <img src={asset.thumbnailUrl} alt=""/> : <span>{asset.assetType?.slice(0, 2) || "?"}</span>}</div></button>
-  <div className="card-copy"><label><input type="checkbox" checked={selected} onChange={onToggle}/><span className="sr-only">Select</span></label><div><strong title={asset.displayName}>{asset.displayName}</strong><small>{asset.assetType || "Asset"} · {asset.assetId}</small></div></div>
-  <div className="card-actions"><button onClick={() => vscode.postMessage({ type: "copy", ids: [asset.assetId] })}>Copy</button><button className="quiet" onClick={() => vscode.postMessage({ type: "open", assetId: asset.assetId })}>Open ↗</button></div>
-</article> }
-
-function Queue({ state }: { state: ExtensionState }) { return <div className="queue">{state.jobs.length ? state.jobs.map(job => <div className="job" key={job.id}><div className={`status ${job.status}`}/><div><strong>{job.displayName}</strong><small>{job.assetType || "Choose type"} · {formatBytes(job.size)}</small>{job.error && <p className="error">{job.error}</p>}</div><span className="job-state">{job.status}</span>{["queued", "uploading", "processing"].includes(job.status) && <button className="quiet" onClick={() => vscode.postMessage({ type: "cancelJob", id: job.id })}>Cancel</button>}{job.assetId && <button onClick={() => vscode.postMessage({ type: "copy", ids: [job.assetId!] })}>Copy ID</button>}</div>) : <div className="empty"><h2>The queue is empty</h2><p>Choose files or a folder to start a batch.</p><button onClick={() => vscode.postMessage({ type: "pickFiles" })}>Choose files</button></div>}</div> }
-
-function UploadReview({ candidates: initial, creators, onClose, onSubmit }: { candidates: UploadCandidate[]; creators: CreatorTarget[]; onClose(): void; onSubmit(items: UploadCandidate[], creator: CreatorTarget): void }) {
-  const [items, setItems] = useState(initial);
-  const [creatorIndex, setCreatorIndex] = useState(0);
-  const update = (id: string, change: Partial<UploadCandidate>) => setItems(current => current.map(item => item.id === id ? { ...item, ...change } : item));
-  const valid = items.filter(item => item.assetType && !item.validationError);
-  return <div className="overlay"><section className="modal wide" role="dialog" aria-modal="true" aria-label="Review upload"><div className="modal-head"><div><p className="eyebrow">Bulk import</p><h2>Review {items.length} files</h2></div><button className="quiet close" onClick={onClose}>×</button></div>
-    <label className="field">Publish as<select value={creatorIndex} onChange={e => setCreatorIndex(Number(e.target.value))}>{creators.map((creator, i) => <option value={i} key={`${creator.kind}-${creator.id}`}>{creator.label}</option>)}</select></label>
-    <div className="review-list">{items.map(item => <div className="review" key={item.id}><div className="file-icon">{item.fileName.split(".").pop()?.toUpperCase()}</div><div className="review-fields"><input value={item.displayName} onChange={e => update(item.id, { displayName: e.target.value })} aria-label={`Name for ${item.fileName}`}/><small>{item.fileName} · {formatBytes(item.size)}</small><textarea value={item.description} onChange={e => update(item.id, { description: e.target.value })} placeholder="Description"/></div><select value={item.assetType ?? ""} onChange={e => update(item.id, { assetType: e.target.value as UploadCandidate["assetType"] })} aria-label={`Type for ${item.fileName}`}><option value="">Choose type</option>{item.allowedTypes.map(type => <option key={type}>{type}</option>)}</select><button className="quiet" onClick={() => setItems(current => current.filter(x => x.id !== item.id))}>Remove</button>{item.validationError && <p className="error row-error">{item.validationError}</p>}</div>)}</div>
-    <footer><span>{valid.length} ready, {items.length - valid.length} need attention</span><button disabled={!valid.length || !creators[creatorIndex]} onClick={() => onSubmit(valid, creators[creatorIndex]!)}>Upload {valid.length}</button></footer>
-  </section></div>;
+function Welcome() {
+  return (
+    <main className="welcome">
+      <Package size={34} weight="duotone" />
+      <h1>Roblox assets</h1>
+      <p>Connect an Open Cloud key to begin.</p>
+      <button onClick={() => vscode.postMessage({ type: "configure" })}>Connect</button>
+      <a href="https://create.roblox.com/dashboard/credentials">Create API key</a>
+    </main>
+  );
 }
-
-function Details({ asset, versions, onClose }: { asset: AssetSummary; versions?: unknown[]; onClose(): void }) {
-  const [name, setName] = useState(asset.displayName); const [description, setDescription] = useState(asset.description ?? "");
-  useEffect(() => { setName(asset.displayName); setDescription(asset.description ?? ""); }, [asset]);
-  return <div className="drawer" role="dialog" aria-label="Asset details"><div className="modal-head"><div><p className="eyebrow">{asset.assetType || "Asset"}</p><h2>{asset.displayName}</h2></div><button className="quiet close" onClick={onClose}>×</button></div>
-    <div className="detail-thumb">{asset.thumbnailUrl ? <img src={asset.thumbnailUrl} alt=""/> : <span>No preview</span>}</div>
-    <dl><dt>Asset ID</dt><dd>{asset.assetId}</dd><dt>Moderation</dt><dd>{asset.moderationState || "Unknown"}</dd><dt>Revision</dt><dd>{asset.revisionId || "Unknown"}</dd><dt>Creator</dt><dd>{asset.creator?.label || "Unknown"}</dd></dl>
-    <label className="field">Name<input value={name} onChange={e => setName(e.target.value)}/></label><label className="field">Description<textarea value={description} onChange={e => setDescription(e.target.value)}/></label>
-    <div className="detail-actions"><button onClick={() => vscode.postMessage({ type: "updateMetadata", assetId: asset.assetId, displayName: name, description })}>Save metadata</button><button className="quiet" onClick={() => vscode.postMessage({ type: "copy", ids: [asset.assetId] })}>Copy ID</button><button className="quiet" onClick={() => vscode.postMessage({ type: "versions", assetId: asset.assetId })}>Versions</button>{asset.archived ? <button onClick={() => vscode.postMessage({ type: "archive", assetId: asset.assetId, restore: true })}>Restore</button> : <button className="danger" onClick={() => vscode.postMessage({ type: "archive", assetId: asset.assetId })}>Archive</button>}</div>
-    {versions && <div className="versions"><h3>Versions</h3>{versions.length ? versions.map((raw, i) => { const version = raw as Record<string, unknown>; const number = String(version.versionNumber ?? version.revisionId ?? i + 1); return <div key={number}><span>Version {number}</span><button className="quiet" onClick={() => vscode.postMessage({ type: "rollback", assetId: asset.assetId, versionNumber: number })}>Rollback</button></div>; }) : <p>No versions returned.</p>}</div>}
-  </div>;
+function AssetRow({
+  asset,
+  selected,
+  onToggle,
+  onOpen,
+}: {
+  asset: AssetSummary;
+  selected: boolean;
+  onToggle(): void;
+  onOpen(): void;
+}) {
+  return (
+    <div className={`asset-row ${selected ? "selected" : ""}`}>
+      <label className="check">
+        <input type="checkbox" checked={selected} onChange={onToggle} />
+        <span>
+          <Check size={11} weight="bold" />
+        </span>
+      </label>
+      <button className="asset-main" onClick={onOpen}>
+        <Thumbnail asset={asset} />
+        <strong>{asset.displayName}</strong>
+      </button>
+      <span className="type">{cleanType(asset.assetType)}</span>
+      <button
+        className="asset-id"
+        onClick={() => vscode.postMessage({ type: "copy", ids: [asset.assetId] })}
+      >
+        {asset.assetId}
+      </button>
+      <button className="icon-button row-menu" title="Details" onClick={onOpen}>
+        <DotsThree size={18} weight="bold" />
+      </button>
+    </div>
+  );
 }
-
-function formatBytes(value: number) { if (value < 1000) return `${value} B`; if (value < 1_000_000) return `${(value / 1000).toFixed(1)} KB`; return `${(value / 1_000_000).toFixed(1)} MB`; }
-createRoot(document.getElementById("root")!).render(<App/>);
+function Thumbnail({ asset }: { asset: AssetSummary }) {
+  if (asset.thumbnailUrl)
+    return (
+      <span className="row-thumb">
+        <img src={asset.thumbnailUrl} alt="" />
+      </span>
+    );
+  const type = cleanType(asset.assetType).toLowerCase(),
+    Icon = type.includes("audio")
+      ? FileAudio
+      : type.includes("video")
+        ? FileVideo
+        : type.includes("image") || type.includes("decal")
+          ? FileImage
+          : Package;
+  return (
+    <span className="row-thumb fallback">
+      <Icon size={19} weight="duotone" />
+    </span>
+  );
+}
+function Empty({ folder, hasAssets }: { folder: Folder; hasAssets: boolean }) {
+  return (
+    <div className="empty">
+      <Rows size={28} weight="duotone" />
+      <strong>
+        {hasAssets
+          ? `No ${folders.find((i) => i.id === folder)?.label.toLowerCase()}`
+          : "No indexed assets"}
+      </strong>
+      <div>
+        <button onClick={() => vscode.postMessage({ type: "pickFiles" })}>Upload</button>
+        <button
+          className="secondary"
+          onClick={() => vscode.postMessage({ type: "addExistingIds" })}
+        >
+          Add IDs
+        </button>
+      </div>
+    </div>
+  );
+}
+function QueuePanel({ state, onClose }: { state: ExtensionState; onClose(): void }) {
+  return (
+    <aside className="side-panel">
+      <div className="panel-head">
+        <strong>Uploads</strong>
+        <button className="icon-button" onClick={onClose}>
+          <X size={16} />
+        </button>
+      </div>
+      <div className="jobs">
+        {state.jobs.length ? (
+          state.jobs.map((job) => (
+            <div className="job" key={job.id}>
+              <span className={`job-dot ${job.status}`} />
+              <div>
+                <strong>{job.displayName}</strong>
+                <small>
+                  {job.status}
+                  {job.error ? `: ${job.error}` : ""}
+                </small>
+              </div>
+              {["queued", "uploading", "processing"].includes(job.status) && (
+                <button
+                  className="icon-button"
+                  onClick={() => vscode.postMessage({ type: "cancelJob", id: job.id })}
+                >
+                  <X size={14} />
+                </button>
+              )}
+              {job.assetId && (
+                <button
+                  className="icon-button"
+                  onClick={() => vscode.postMessage({ type: "copy", ids: [job.assetId!] })}
+                >
+                  <Copy size={14} />
+                </button>
+              )}
+            </div>
+          ))
+        ) : (
+          <div className="panel-empty">No uploads</div>
+        )}
+      </div>
+    </aside>
+  );
+}
+function UploadReview({
+  candidates: initial,
+  creators,
+  initialCreator,
+  onClose,
+  onSubmit,
+}: {
+  candidates: UploadCandidate[];
+  creators: CreatorTarget[];
+  initialCreator?: CreatorTarget;
+  onClose(): void;
+  onSubmit(items: UploadCandidate[], creator: CreatorTarget): void;
+}) {
+  const [items, setItems] = useState(initial),
+    [creatorIndex, setCreatorIndex] = useState(
+      Math.max(
+        0,
+        creators.findIndex((c) => initialCreator && sameCreator(c, initialCreator)),
+      ),
+    );
+  const update = (id: string, change: Partial<UploadCandidate>) =>
+      setItems((current) =>
+        current.map((item) => (item.id === id ? { ...item, ...change } : item)),
+      ),
+    valid = items.filter((item) => item.assetType && !item.validationError);
+  return (
+    <div className="overlay">
+      <section className="modal">
+        <div className="panel-head">
+          <strong>Upload {items.length} files</strong>
+          <button className="icon-button" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+        <label className="field">
+          Creator
+          <select value={creatorIndex} onChange={(e) => setCreatorIndex(Number(e.target.value))}>
+            {creators.map((c, i) => (
+              <option value={i} key={keyFor(c)}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="review-list">
+          {items.map((item) => (
+            <div className="review-row" key={item.id}>
+              <span className="file-tile">{item.fileName.split(".").pop()?.toUpperCase()}</span>
+              <div>
+                <input
+                  value={item.displayName}
+                  onChange={(e) => update(item.id, { displayName: e.target.value })}
+                />
+                <small>
+                  {item.fileName} · {formatBytes(item.size)}
+                </small>
+                {item.validationError && <small className="error">{item.validationError}</small>}
+              </div>
+              <select
+                value={item.assetType ?? ""}
+                onChange={(e) =>
+                  update(item.id, { assetType: e.target.value as UploadCandidate["assetType"] })
+                }
+              >
+                <option value="">Type</option>
+                {item.allowedTypes.map((type) => (
+                  <option key={type}>{type}</option>
+                ))}
+              </select>
+              <button
+                className="icon-button"
+                onClick={() => setItems((current) => current.filter((x) => x.id !== item.id))}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="modal-actions">
+          <span>{valid.length} ready</span>
+          <button
+            disabled={!valid.length || !creators[creatorIndex]}
+            onClick={() => onSubmit(valid, creators[creatorIndex]!)}
+          >
+            Upload
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+function Details({
+  asset,
+  versions,
+  onClose,
+}: {
+  asset: AssetSummary;
+  versions?: unknown[];
+  onClose(): void;
+}) {
+  const [name, setName] = useState(asset.displayName),
+    [description, setDescription] = useState(asset.description ?? ""),
+    imageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    setName(asset.displayName);
+    setDescription(asset.description ?? "");
+  }, [asset]);
+  useGSAP(
+    () => {
+      if (imageRef.current)
+        gsap.fromTo(
+          imageRef.current,
+          { opacity: 0.2, scale: 0.94 },
+          { opacity: 1, scale: 1, duration: 0.45, ease: "power3.out" },
+        );
+    },
+    { scope: imageRef, dependencies: [asset.assetId] },
+  );
+  return (
+    <aside className="side-panel details">
+      <div className="panel-head">
+        <strong>{asset.displayName}</strong>
+        <button className="icon-button" onClick={onClose}>
+          <X size={16} />
+        </button>
+      </div>
+      <div className="detail-image" ref={imageRef}>
+        {asset.thumbnailUrl ? <img src={asset.thumbnailUrl} alt="" /> : <Thumbnail asset={asset} />}
+      </div>
+      <div className="detail-id">
+        <code>{asset.assetId}</code>
+        <button
+          className="icon-button"
+          onClick={() => vscode.postMessage({ type: "copy", ids: [asset.assetId] })}
+        >
+          <Copy size={15} />
+        </button>
+      </div>
+      <label className="field">
+        Name
+        <input value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <label className="field">
+        Description
+        <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+      </label>
+      <dl>
+        <dt>Type</dt>
+        <dd>{cleanType(asset.assetType)}</dd>
+        <dt>Status</dt>
+        <dd>{asset.moderationState || "Unknown"}</dd>
+        <dt>Revision</dt>
+        <dd>{asset.revisionId || "Unknown"}</dd>
+      </dl>
+      <button
+        onClick={() =>
+          vscode.postMessage({
+            type: "updateMetadata",
+            assetId: asset.assetId,
+            displayName: name,
+            description,
+          })
+        }
+      >
+        Save
+      </button>
+      <div className="detail-links">
+        <button
+          className="secondary"
+          onClick={() => vscode.postMessage({ type: "versions", assetId: asset.assetId })}
+        >
+          Versions
+        </button>
+        {asset.archived ? (
+          <button
+            className="secondary"
+            onClick={() =>
+              vscode.postMessage({ type: "archive", assetId: asset.assetId, restore: true })
+            }
+          >
+            Restore
+          </button>
+        ) : (
+          <button
+            className="danger"
+            onClick={() => vscode.postMessage({ type: "archive", assetId: asset.assetId })}
+          >
+            <ArchiveIcon size={15} />
+            Archive
+          </button>
+        )}
+      </div>
+      {versions && (
+        <div className="versions">
+          {versions.length ? (
+            versions.map((raw, i) => {
+              const v = raw as Record<string, unknown>,
+                n = String(
+                  v.versionNumber ??
+                    String(v.path ?? "")
+                      .split("/")
+                      .pop() ??
+                    i + 1,
+                );
+              return (
+                <div key={n}>
+                  <span>Version {n}</span>
+                  <button
+                    className="secondary"
+                    onClick={() =>
+                      vscode.postMessage({
+                        type: "rollback",
+                        assetId: asset.assetId,
+                        versionNumber: n,
+                      })
+                    }
+                  >
+                    Rollback
+                  </button>
+                </div>
+              );
+            })
+          ) : (
+            <span>No versions</span>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
+function keyFor(c: CreatorTarget) {
+  return `${c.kind}:${c.id}`;
+}
+function sameCreator(a: CreatorTarget | undefined, b: CreatorTarget) {
+  return Boolean(a && a.kind === b.kind && a.id === b.id);
+}
+function cleanType(v?: string) {
+  return (v || "Asset")
+    .replace(/^ASSET_TYPE_/, "")
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (x) => x.toUpperCase());
+}
+function inFolder(asset: AssetSummary, folder: Folder) {
+  const type = cleanType(asset.assetType).toLowerCase();
+  if (folder === "all") return true;
+  if (folder === "images") return /image|decal|texture|shirt|tshirt|pants/.test(type);
+  if (folder === "audio") return /audio|sound/.test(type);
+  if (folder === "models") return /model|mesh|package/.test(type);
+  if (folder === "animations") return /animation/.test(type);
+  if (folder === "video") return /video/.test(type);
+  return false;
+}
+function countFolder(assets: AssetSummary[], folder: Folder) {
+  return assets.filter((a) =>
+    folder === "archived" ? a.archived : !a.archived && inFolder(a, folder),
+  ).length;
+}
+function formatBytes(v: number) {
+  return v < 1000
+    ? `${v} B`
+    : v < 1_000_000
+      ? `${(v / 1000).toFixed(1)} KB`
+      : `${(v / 1_000_000).toFixed(1)} MB`;
+}
+createRoot(document.getElementById("root")!).render(<App />);

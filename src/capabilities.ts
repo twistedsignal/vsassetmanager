@@ -19,18 +19,28 @@ export const capabilities: Record<string, Capability> = {
   ".gltf": { mime: "model/gltf+json", types: ["Model"], maxBytes: 20_000_000 },
   ".glb": { mime: "model/gltf-binary", types: ["Model"], maxBytes: 20_000_000 },
   ".rbxm": { mime: "model/x-rbxm", types: ["Model", "Animation"], maxBytes: 20_000_000 },
-  ".rbxmx": { mime: "model/x-rbxm", types: ["Model", "Animation"], maxBytes: 20_000_000 }
+  ".rbxmx": { mime: "model/x-rbxm", types: ["Model", "Animation"], maxBytes: 20_000_000 },
 };
 
-export function candidateFor(filePath: string, size: number, defaultImageType: "Decal" | "Image", description: string): UploadCandidate {
+export function candidateFor(
+  filePath: string,
+  size: number,
+  defaultImageType: "Decal" | "Image",
+  description: string,
+): UploadCandidate {
   const ext = path.extname(filePath).toLowerCase();
   const cap = capabilities[ext];
   const base = path.basename(filePath, ext).replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
   const allowedTypes = cap?.types ?? [];
   let validationError: string | undefined;
   if (!cap) validationError = `Unsupported file type: ${ext || "none"}`;
-  else if (cap.maxBytes && size > cap.maxBytes) validationError = `File exceeds the documented ${Math.round(cap.maxBytes / 1_000_000)} MB limit`;
-  const assetType = allowedTypes.includes(defaultImageType) ? defaultImageType : allowedTypes.length === 1 ? allowedTypes[0] : undefined;
+  else if (cap.maxBytes && size > cap.maxBytes)
+    validationError = `File exceeds the documented ${Math.round(cap.maxBytes / 1_000_000)} MB limit`;
+  const assetType = allowedTypes.includes(defaultImageType)
+    ? defaultImageType
+    : allowedTypes.length === 1
+      ? allowedTypes[0]
+      : undefined;
   return {
     id: `${filePath}:${size}`,
     path: filePath,
@@ -41,7 +51,7 @@ export function candidateFor(filePath: string, size: number, defaultImageType: "
     assetType,
     displayName: base || "Untitled asset",
     description,
-    validationError
+    validationError,
   };
 }
 
@@ -49,7 +59,8 @@ export function copyValue(id: string, format: string, template: string): string 
   if (format === "numeric") return id;
   if (format === "lua") return `\"rbxassetid://${id}\"`;
   if (format === "custom") {
-    if ((template.match(/\$\{id\}/g) ?? []).length !== 1) throw new Error("Custom copy template must contain exactly one ${id} placeholder.");
+    if ((template.match(/\$\{id\}/g) ?? []).length !== 1)
+      throw new Error("Custom copy template must contain exactly one ${id} placeholder.");
     return template.replace("${id}", id);
   }
   return `rbxassetid://${id}`;

@@ -8,6 +8,6 @@ export default defineConfig({
   build: {
     outDir: "../dist/webview",
     emptyOutDir: true,
-    rollupOptions: { output: { entryFileNames: "app.js", assetFileNames: "app.[ext]" } }
-  }
+    rollupOptions: { output: { entryFileNames: "app.js", assetFileNames: "app.[ext]" } },
+  },
 });

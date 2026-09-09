@@ -5,104 +5,255 @@
   "version": "0.1.0",
   "publisher": "vsassetmanager",
   "license": "MIT",
-  "engines": { "vscode": "^1.96.0" },
-  "categories": ["Other", "Visualization"],
-  "keywords": ["roblox", "rojo", "assets", "open cloud"],
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "roblox",
+    "rojo",
+    "assets",
+    "open cloud"
+  ],
   "activationEvents": [
     "onView:robloxAssetManager.library",
     "onCommand:robloxAssetManager.open"
   ],
   "main": "./dist/extension.js",
-  "files": ["dist", "media", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "media",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "vite build && node scripts/build-extension.mjs",
     "watch": "node scripts/build-extension.mjs --watch",
     "check": "tsc --noEmit && vitest run --config vitest.config.ts",
+    "format": "prettier --write \"{src,webview/src,scripts}/**/*.{ts,tsx,css,mjs}\" \"*.{json,ts}\"",
+    "format:check": "prettier --check \"{src,webview/src,scripts}/**/*.{ts,tsx,css,mjs}\" \"*.{json,ts}\"",
     "package": "pnpm build && vsce package"
   },
   "contributes": {
     "icons": {
-      "roblox-assets-icon": { "description": "Roblox Asset Manager", "default": "media/icon.svg" }
+      "roblox-assets-icon": {
+        "description": "Roblox Asset Manager",
+        "default": "media/icon.svg"
+      }
     },
     "commands": [
-      { "command": "robloxAssetManager.open", "title": "Open Asset Manager", "category": "Roblox Assets", "icon": "$(preview)" },
-      { "command": "robloxAssetManager.configureApiKey", "title": "Configure API Key", "category": "Roblox Assets" },
-      { "command": "robloxAssetManager.switchProfile", "title": "Switch Profile", "category": "Roblox Assets" },
-      { "command": "robloxAssetManager.uploadFiles", "title": "Upload Files", "category": "Roblox Assets", "icon": "$(cloud-upload)" },
-      { "command": "robloxAssetManager.uploadFolder", "title": "Upload Folder", "category": "Roblox Assets" },
-      { "command": "robloxAssetManager.addExistingIds", "title": "Add Existing Asset IDs", "category": "Roblox Assets" },
-      { "command": "robloxAssetManager.copyAssetId", "title": "Copy Asset ID", "category": "Roblox Assets" },
-      { "command": "robloxAssetManager.refresh", "title": "Refresh Library", "category": "Roblox Assets", "icon": "$(refresh)" },
-      { "command": "robloxAssetManager.exportIndex", "title": "Export Upload Index", "category": "Roblox Assets" },
-      { "command": "robloxAssetManager.importIndex", "title": "Import Upload Index", "category": "Roblox Assets" }
+      {
+        "command": "robloxAssetManager.open",
+        "title": "Open Asset Manager",
+        "category": "Roblox Assets",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "robloxAssetManager.configureApiKey",
+        "title": "Configure API Key",
+        "category": "Roblox Assets"
+      },
+      {
+        "command": "robloxAssetManager.switchProfile",
+        "title": "Switch Profile",
+        "category": "Roblox Assets"
+      },
+      {
+        "command": "robloxAssetManager.uploadFiles",
+        "title": "Upload Files",
+        "category": "Roblox Assets",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "robloxAssetManager.uploadFolder",
+        "title": "Upload Folder",
+        "category": "Roblox Assets"
+      },
+      {
+        "command": "robloxAssetManager.addExistingIds",
+        "title": "Add Existing Asset IDs",
+        "category": "Roblox Assets"
+      },
+      {
+        "command": "robloxAssetManager.copyAssetId",
+        "title": "Copy Asset ID",
+        "category": "Roblox Assets"
+      },
+      {
+        "command": "robloxAssetManager.refresh",
+        "title": "Refresh Library",
+        "category": "Roblox Assets",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "robloxAssetManager.exportIndex",
+        "title": "Export Upload Index",
+        "category": "Roblox Assets"
+      },
+      {
+        "command": "robloxAssetManager.importIndex",
+        "title": "Import Upload Index",
+        "category": "Roblox Assets"
+      }
     ],
     "viewsContainers": {
-      "activitybar": [{ "id": "robloxAssetManager", "title": "Roblox Assets", "icon": "media/icon.svg" }]
+      "activitybar": [
+        {
+          "id": "robloxAssetManager",
+          "title": "Roblox Assets",
+          "icon": "media/icon.svg"
+        }
+      ]
     },
     "views": {
-      "robloxAssetManager": [{ "type": "webview", "id": "robloxAssetManager.library", "name": "Asset Manager" }]
+      "robloxAssetManager": [
+        {
+          "type": "webview",
+          "id": "robloxAssetManager.library",
+          "name": "Asset Manager"
+        }
+      ]
     },
     "menus": {
       "view/title": [
-        { "command": "robloxAssetManager.uploadFiles", "when": "view == robloxAssetManager.library", "group": "navigation@1" },
-        { "command": "robloxAssetManager.refresh", "when": "view == robloxAssetManager.library", "group": "navigation@2" }
+        {
+          "command": "robloxAssetManager.uploadFiles",
+          "when": "view == robloxAssetManager.library",
+          "group": "navigation@1"
+        },
+        {
+          "command": "robloxAssetManager.refresh",
+          "when": "view == robloxAssetManager.library",
+          "group": "navigation@2"
+        }
       ],
       "explorer/context": [
-        { "command": "robloxAssetManager.uploadFiles", "when": "resourceExtname =~ /\\.(png|jpe?g|bmp|tga|mp3|ogg|wav|flac|mp4|mov|fbx|gltf|glb|rbxm|rbxmx)$/i", "group": "roblox@1" }
+        {
+          "command": "robloxAssetManager.uploadFiles",
+          "when": "resourceExtname =~ /\\.(png|jpe?g|bmp|tga|mp3|ogg|wav|flac|mp4|mov|fbx|gltf|glb|rbxm|rbxmx)$/i",
+          "group": "roblox@1"
+        }
       ]
     },
     "configuration": {
       "title": "Roblox Asset Manager",
       "properties": {
         "robloxAssetManager.copy.format": {
-          "type": "string", "enum": ["numeric", "uri", "lua", "custom"], "default": "uri",
+          "type": "string",
+          "enum": [
+            "numeric",
+            "uri",
+            "lua",
+            "custom"
+          ],
+          "default": "uri",
           "description": "Format used when copying an asset ID."
         },
         "robloxAssetManager.copy.customTemplate": {
-          "type": "string", "default": "rbxassetid://${id}",
+          "type": "string",
+          "default": "rbxassetid://${id}",
           "description": "Custom copy template. It must contain exactly one ${id} placeholder."
         },
         "robloxAssetManager.copy.separator": {
-          "type": "string", "default": "\\n", "description": "Separator used when copying multiple IDs. Escape sequences such as \\n are supported."
+          "type": "string",
+          "default": "\\n",
+          "description": "Separator used when copying multiple IDs. Escape sequences such as \\n are supported."
         },
         "robloxAssetManager.upload.concurrency": {
-          "type": "integer", "minimum": 1, "maximum": 10, "default": 3, "description": "Maximum simultaneous uploads."
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3,
+          "description": "Maximum simultaneous uploads."
         },
         "robloxAssetManager.upload.retryCount": {
-          "type": "integer", "minimum": 0, "maximum": 5, "default": 2, "description": "Retries for transient failures."
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5,
+          "default": 2,
+          "description": "Retries for transient failures."
         },
         "robloxAssetManager.upload.pollIntervalMs": {
-          "type": "integer", "minimum": 500, "maximum": 30000, "default": 1500, "description": "Delay between operation status checks."
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 30000,
+          "default": 1500,
+          "description": "Delay between operation status checks."
         },
         "robloxAssetManager.upload.operationTimeoutMs": {
-          "type": "integer", "minimum": 10000, "maximum": 1800000, "default": 300000, "description": "Maximum time to wait for Roblox to process an upload."
+          "type": "integer",
+          "minimum": 10000,
+          "maximum": 1800000,
+          "default": 300000,
+          "description": "Maximum time to wait for Roblox to process an upload."
         },
         "robloxAssetManager.upload.defaultImageType": {
-          "type": "string", "enum": ["Decal", "Image"], "default": "Decal", "description": "Default type for image files."
+          "type": "string",
+          "enum": [
+            "Decal",
+            "Image"
+          ],
+          "default": "Decal",
+          "description": "Default type for image files."
         },
         "robloxAssetManager.upload.defaultDescription": {
-          "type": "string", "default": "", "description": "Default description for new assets."
+          "type": "string",
+          "default": "",
+          "description": "Default description for new assets."
         },
         "robloxAssetManager.upload.copyOnSuccess": {
-          "type": "boolean", "default": false, "description": "Copy each asset ID after a successful single-file upload."
+          "type": "boolean",
+          "default": false,
+          "description": "Copy each asset ID after a successful single-file upload."
         },
         "robloxAssetManager.library.thumbnailSize": {
-          "type": "integer", "enum": [150, 420], "default": 420, "description": "Requested Roblox thumbnail size."
+          "type": "integer",
+          "enum": [
+            150,
+            420
+          ],
+          "default": 420,
+          "description": "Requested Roblox thumbnail size."
         },
         "robloxAssetManager.library.pageSize": {
-          "type": "integer", "minimum": 10, "maximum": 100, "default": 50, "description": "Inventory items loaded per page."
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 100,
+          "default": 50,
+          "description": "Inventory items loaded per page."
         },
         "robloxAssetManager.library.defaultSort": {
-          "type": "string", "enum": ["newest", "oldest", "name"], "default": "newest", "description": "Default local-history sort order."
+          "type": "string",
+          "enum": [
+            "newest",
+            "oldest",
+            "name"
+          ],
+          "default": "newest",
+          "description": "Default local-history sort order."
         },
         "robloxAssetManager.confirm.archive": {
-          "type": "boolean", "default": true, "description": "Confirm before archiving an asset."
+          "type": "boolean",
+          "default": true,
+          "description": "Confirm before archiving an asset."
         },
         "robloxAssetManager.confirm.rollback": {
-          "type": "boolean", "default": true, "description": "Confirm before rolling an asset back."
+          "type": "boolean",
+          "default": true,
+          "description": "Confirm before rolling an asset back."
         },
         "robloxAssetManager.logging.level": {
-          "type": "string", "enum": ["error", "info", "debug"], "default": "info", "description": "Diagnostic output level. Credentials are always redacted."
+          "type": "string",
+          "enum": [
+            "error",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "description": "Diagnostic output level. Credentials are always redacted."
         }
       }
     }
@@ -114,12 +265,16 @@
     "@types/vscode": "^1.96.0",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.24.2",
+    "prettier": "^3.9.6",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
+    "@phosphor-icons/react": "^2.1.10",
     "@vitejs/plugin-react": "^4.3.4",
+    "gsap": "^3.15.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   }

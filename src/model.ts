@@ -68,12 +68,18 @@ export type ExtensionState = {
 export type WebviewMessage =
   | { type: "ready" }
   | { type: "configure" }
+  | { type: "manageCreators" }
+  | { type: "addExistingIds"; creator?: CreatorTarget }
   | { type: "switchProfile" }
   | { type: "refresh" }
   | { type: "loadMore" }
   | { type: "pickFiles" }
   | { type: "pickFolder" }
-  | { type: "submitUpload"; candidates: Array<Pick<UploadCandidate, "id" | "assetType" | "displayName" | "description">>; creator: CreatorTarget }
+  | {
+      type: "submitUpload";
+      candidates: Array<Pick<UploadCandidate, "id" | "assetType" | "displayName" | "description">>;
+      creator: CreatorTarget;
+    }
   | { type: "copy"; ids: string[] }
   | { type: "open"; assetId: string }
   | { type: "details"; assetId: string }

@@ -17,8 +17,12 @@ describe("candidateFor", () => {
   });
 
   it("rejects unknown formats and oversized bounded files", () => {
-    expect(candidateFor("/tmp/readme.txt", 10, "Decal", "").validationError).toContain("Unsupported");
-    expect(candidateFor("/tmp/huge.wav", 20_000_001, "Decal", "").validationError).toContain("20 MB");
+    expect(candidateFor("/tmp/readme.txt", 10, "Decal", "").validationError).toContain(
+      "Unsupported",
+    );
+    expect(candidateFor("/tmp/huge.wav", 20_000_001, "Decal", "").validationError).toContain(
+      "20 MB",
+    );
   });
 });
 
@@ -26,8 +30,8 @@ describe("copyValue", () => {
   it.each([
     ["numeric", "123"],
     ["uri", "rbxassetid://123"],
-    ["lua", "\"rbxassetid://123\""],
-    ["custom", "asset(123)"]
+    ["lua", '"rbxassetid://123"'],
+    ["custom", "asset(123)"],
   ])("renders %s format", (format, expected) => {
     expect(copyValue("123", format, "asset(${id})")).toBe(expected);
   });

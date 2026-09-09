@@ -9,7 +9,7 @@ const options = {
   external: ["vscode"],
   outfile: "dist/extension.js",
   sourcemap: watch,
-  logLevel: "info"
+  logLevel: "info",
 };
 
 if (watch) {
