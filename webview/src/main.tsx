@@ -42,6 +42,7 @@ const empty: ExtensionState = {
   profiles: [],
   history: [],
   inventory: [],
+  creatorAssets: [],
   jobs: [],
   loading: false,
   isRojoProject: false,
@@ -93,14 +94,16 @@ function App() {
   const repositoryAssets = useMemo(() => {
     if (!activeCreator) return [];
     const history = state.history.filter((a) => sameCreator(a.creator, activeCreator));
+    const discovered = state.creatorAssets.filter((a) => sameCreator(a.creator, activeCreator));
     const inventory =
       activeCreator.kind === "user" && activeCreator.id === state.profile?.userId
         ? state.inventory.map((a) => ({ ...a, creator: activeCreator }))
         : [];
     const merged = new Map<string, AssetSummary>(inventory.map((a) => [a.assetId, a]));
+    for (const asset of discovered) merged.set(asset.assetId, asset);
     for (const asset of history) merged.set(asset.assetId, asset);
     return [...merged.values()];
-  }, [activeCreator, state.history, state.inventory, state.profile?.userId]);
+  }, [activeCreator, state.history, state.inventory, state.creatorAssets, state.profile?.userId]);
   const shown = useMemo(
     () =>
       repositoryAssets.filter((asset) => {
@@ -156,11 +159,12 @@ function App() {
         <div className="repo-tree">
           {creators.map((creator) => {
             const active = activeCreator && keyFor(activeCreator) === keyFor(creator);
-            const count =
-              state.history.filter((a) => sameCreator(a.creator, creator) && !a.archived).length +
-              (creator.kind === "user" && creator.id === state.profile?.userId
-                ? state.inventory.length
-                : 0);
+            const creatorIds = new Set(
+              [...state.history, ...state.creatorAssets, ...state.inventory]
+                .filter((asset) => sameCreator(asset.creator, creator) && !asset.archived)
+                .map((asset) => asset.assetId),
+            );
+            const count = creatorIds.size;
             return (
               <div key={keyFor(creator)}>
                 <button

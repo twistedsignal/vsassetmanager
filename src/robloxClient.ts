@@ -17,6 +17,78 @@ export class RobloxApiError extends Error {
 export class RobloxClient {
   constructor(private readonly apiKey: string) {}
 
+  async resolveCreator(creator: CreatorTarget): Promise<CreatorTarget> {
+    if (creator.kind === "user") {
+      const value = await this.publicRequest<{ name?: string; displayName?: string }>(
+        `https://users.roblox.com/v1/users/${encodeURIComponent(creator.id)}`,
+      );
+      const username = value.name?.trim();
+      const displayName = value.displayName?.trim();
+      return {
+        ...creator,
+        label:
+          username && displayName && displayName !== username
+            ? `${displayName} (@${username})`
+            : username
+              ? `@${username}`
+              : creator.label,
+      };
+    }
+    const value = await this.publicRequest<{ name?: string }>(
+      `https://groups.roblox.com/v1/groups/${encodeURIComponent(creator.id)}`,
+    );
+    return { ...creator, label: value.name?.trim() || creator.label };
+  }
+
+  async creatorAssets(creator: CreatorTarget): Promise<AssetSummary[]> {
+    const categories = ["Audio", "Model", "Decal", "Plugin", "MeshPart", "Video", "FontFamily"];
+    const assets = new Map<string, AssetSummary>();
+    for (const category of categories) {
+      let pageToken: string | undefined;
+      const seenTokens = new Set<string>();
+      do {
+        const params = new URLSearchParams({
+          searchCategoryType: category,
+          maxPageSize: "100",
+          sortCategory: "CreateTime",
+          sortDirection: "Descending",
+          includeOnlyVerifiedCreators: "false",
+          searchView: "Full",
+          [`${creator.kind}Id`]: creator.id,
+        });
+        if (pageToken) params.set("pageToken", pageToken);
+        const value = await this.publicRequest<{
+          creatorStoreAssets?: Array<{
+            asset?: Record<string, unknown>;
+            creator?: { userId?: number; groupId?: number; name?: string };
+          }>;
+          nextPageToken?: string;
+        }>(`${API}/toolbox-service/v2/assets:search?${params}`);
+        for (const item of value.creatorStoreAssets ?? []) {
+          const raw = item.asset;
+          if (!raw?.id) continue;
+          const assetId = String(raw.id);
+          assets.set(assetId, {
+            assetId,
+            displayName: String(raw.name ?? `Asset ${assetId}`),
+            description: typeof raw.description === "string" ? raw.description : undefined,
+            assetType: toolboxAssetType(raw.assetTypeId, category),
+            creator,
+            createdAt: typeof raw.createTime === "string" ? raw.createTime : undefined,
+            updatedAt: typeof raw.updateTime === "string" ? raw.updateTime : undefined,
+            source: "creator",
+          });
+        }
+        pageToken = value.nextPageToken || undefined;
+        if (pageToken && seenTokens.has(pageToken)) break;
+        if (pageToken) seenTokens.add(pageToken);
+      } while (pageToken && seenTokens.size < 100);
+    }
+    const result = [...assets.values()];
+    await this.addThumbnails(result);
+    return result;
+  }
+
   private async request<T>(url: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(url, {
       ...init,
@@ -45,6 +117,18 @@ export class RobloxClient {
       );
     }
     if (response.status === 204) return undefined as T;
+    return response.json() as Promise<T>;
+  }
+
+  private async publicRequest<T>(url: string): Promise<T> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new RobloxApiError(
+        `Roblox returned HTTP ${response.status} for ${new URL(url).hostname}.`,
+        response.status,
+        Number(response.headers.get("retry-after")) || undefined,
+      );
+    }
     return response.json() as Promise<T>;
   }
 
@@ -189,7 +273,10 @@ export class RobloxClient {
     );
   }
 
-  private asset(value: Record<string, unknown>, source: "history" | "inventory"): AssetSummary {
+  private asset(
+    value: Record<string, unknown>,
+    source: "history" | "inventory" | "creator",
+  ): AssetSummary {
     const assetId = String(
       value.assetId ??
         String(value.path ?? "")
@@ -252,4 +339,19 @@ export class RobloxClient {
       }
     }
   }
+}
+
+function toolboxAssetType(value: unknown, fallback: string): string {
+  const names: Record<number, string> = {
+    1: "Image",
+    3: "Audio",
+    4: "Mesh",
+    10: "Model",
+    13: "Decal",
+    24: "Animation",
+    38: "Plugin",
+    40: "MeshPart",
+    62: "Video",
+  };
+  return typeof value === "number" ? (names[value] ?? fallback) : fallback;
 }

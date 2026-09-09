@@ -68,11 +68,13 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   private readonly profiles: ProfileStore;
   private readonly history: HistoryStore;
   private inventory: AssetSummary[] = [];
+  private creatorAssets: AssetSummary[] = [];
   private jobs: UploadJob[] = [];
   private nextPageToken?: string;
   private candidates = new Map<string, UploadCandidate>();
   private controllers = new Map<string, AbortController>();
   private loading = false;
+  private hasLoaded = false;
   private error?: string;
   private isRojoProject = false;
   private readonly output = vscode.window.createOutputChannel("Roblox Asset Manager", {
@@ -106,6 +108,10 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       this.context.subscriptions,
     );
     await this.sendState();
+    if (this.profiles.active() && !this.hasLoaded) {
+      this.hasLoaded = true;
+      void this.refresh().catch((error) => this.fail(error));
+    }
   }
 
   private html(webview: vscode.Webview): string {
@@ -207,6 +213,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       key,
     );
     this.inventory = [];
+    this.creatorAssets = [];
     this.nextPageToken = undefined;
     await this.refresh();
   }
@@ -221,6 +228,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
     if (!picked) return;
     await this.profiles.activate(picked.profile.id);
     this.inventory = [];
+    this.creatorAssets = [];
     this.nextPageToken = undefined;
     await this.refresh();
   }
@@ -252,7 +260,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       .filter(Boolean)
       .map((id) => ({ kind: "group" as const, id, label: `Group ${id}` }));
     await this.profiles.save({ ...profile, creators: [user, ...groups] }, key);
-    await this.sendState();
+    await this.refresh();
   }
 
   private async client(): Promise<{
@@ -272,9 +280,51 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
     this.error = undefined;
     await this.sendState();
     try {
+      const { client, profile } = await this.client();
+      const resolvedCreators = await Promise.all(
+        profile.creators.map(async (creator) => {
+          try {
+            return await client.resolveCreator(creator);
+          } catch (error) {
+            this.output.warn(`Could not resolve ${creator.kind} ${creator.id}: ${friendly(error)}`);
+            return creator;
+          }
+        }),
+      );
+      if (
+        resolvedCreators.some((creator, index) => creator.label !== profile.creators[index]?.label)
+      ) {
+        const key = await this.profiles.key(profile.id);
+        if (key) {
+          const defaultCreator =
+            resolvedCreators.find((creator) =>
+              sameCreatorTarget(creator, profile.defaultCreator),
+            ) ?? resolvedCreators[0]!;
+          await this.profiles.save({ ...profile, creators: resolvedCreators, defaultCreator }, key);
+        }
+      }
+
       this.inventory = [];
       this.nextPageToken = undefined;
-      await this.loadInventory(false);
+      try {
+        await this.loadInventory(false);
+      } catch (error) {
+        this.output.warn(`Inventory lookup failed: ${friendly(error)}`);
+      }
+
+      const discovered = await Promise.all(
+        resolvedCreators.map(async (creator) => {
+          try {
+            return await client.creatorAssets(creator);
+          } catch (error) {
+            this.output.warn(
+              `Creator asset lookup failed for ${creator.label}: ${friendly(error)}`,
+            );
+            return [];
+          }
+        }),
+      );
+      this.creatorAssets = discovered.flat();
     } finally {
       this.loading = false;
       await this.sendState();
@@ -615,6 +665,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       profiles: this.profiles.profiles().map((p) => ({ id: p.id, label: p.label })),
       history: index.assets,
       inventory: this.inventory,
+      creatorAssets: this.creatorAssets,
       jobs: this.jobs,
       inventoryNextPageToken: this.nextPageToken,
       loading: this.loading,
@@ -643,6 +694,9 @@ function groupIds(value: string): string | undefined {
   return !value.trim() || value.split(",").every((x) => /^\d+$/.test(x.trim()))
     ? undefined
     : "Use numeric IDs separated by commas";
+}
+function sameCreatorTarget(left: CreatorTarget, right: CreatorTarget): boolean {
+  return left.kind === right.kind && left.id === right.id;
 }
 function parseIds(value: string): string[] {
   return [...new Set(value.match(/\d+/g) ?? [])];

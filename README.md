@@ -4,7 +4,7 @@ A thumbnail-first Roblox asset manager for VS Code. It is designed around Rojo w
 
 ## What works
 
-- Browse assets in a repository-style explorer, with a separate repository for each user or group.
+- Browse assets in a repository-style explorer, with Roblox usernames and group names resolved automatically.
 - Filter each creator by images, audio, models, animations, video, and archived assets.
 - Bulk upload images, audio, video, models, and animations supported by Roblox Open Cloud.
 - Publish to a user or configured group.
@@ -14,7 +14,9 @@ A thumbnail-first Roblox asset manager for VS Code. It is designed around Rojo w
 - Read and edit metadata, inspect versions, roll back, archive, and restore through supported APIs.
 - Import or export the non-secret local upload index.
 
-Roblox does not expose the same complete creator-library listing used by Studio. The user repository combines items returned by the Inventory API with assets tracked by this extension. Group repositories contain tracked uploads. Use **Add IDs** in a repository to index older images, models, and other assets that the Inventory API omits.
+The extension refreshes automatically and merges three sources: user inventory, creator-filtered Creator Store searches, and its upload index. This finds existing public decals, models, meshes, audio, plugins, videos, fonts, avatar items, and anything uploaded through the extension.
+
+Roblox does not expose the complete private Development Items list used by Creator Dashboard and Studio through Open Cloud. Private assets that are absent from both Inventory and Creator Store search cannot be discovered by creator ID alone. Use **Add IDs** to index those assets. The extension never reads browser cookies or undocumented Roblox sessions.
 
 ## Setup
 

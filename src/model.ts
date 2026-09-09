@@ -20,7 +20,7 @@ export type AssetSummary = {
   createdAt?: string;
   updatedAt?: string;
   thumbnailUrl?: string;
-  source: "inventory" | "history";
+  source: "inventory" | "history" | "creator";
   archived?: boolean;
 };
 
@@ -58,6 +58,7 @@ export type ExtensionState = {
   profiles: Array<{ id: string; label: string }>;
   history: AssetSummary[];
   inventory: AssetSummary[];
+  creatorAssets: AssetSummary[];
   jobs: UploadJob[];
   inventoryNextPageToken?: string;
   loading: boolean;
