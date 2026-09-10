@@ -77,7 +77,14 @@ function App() {
       else if (m.type === "candidates") setCandidates(m.candidates);
       else if (m.type === "assetDetails") setDetails(m.asset);
       else if (m.type === "assetVersions") setVersions(m.versions);
-      else if (m.type === "notice") {
+      else if (m.type === "assetsRemoved") {
+        setSelected((current) => {
+          const next = new Set(current);
+          for (const id of m.ids) next.delete(id);
+          return next;
+        });
+        setDetails((current) => (current && m.ids.includes(current.assetId) ? undefined : current));
+      } else if (m.type === "notice") {
         setNotice(m.message);
         window.setTimeout(() => setNotice(undefined), 5000);
       }
@@ -284,6 +291,13 @@ function App() {
             >
               <Copy size={15} />
               Copy IDs
+            </button>
+            <button
+              className="danger"
+              onClick={() => vscode.postMessage({ type: "removeAssets", ids: [...selected] })}
+            >
+              <Trash size={15} />
+              Remove
             </button>
             <button className="icon-button" title="Clear" onClick={() => setSelected(new Set())}>
               <X size={15} />
@@ -687,6 +701,13 @@ function Details({
           </button>
         )}
       </div>
+      <button
+        className="remove-index"
+        onClick={() => vscode.postMessage({ type: "removeAssets", ids: [asset.assetId] })}
+      >
+        <Trash size={15} />
+        Remove from index
+      </button>
       {versions && (
         <div className="versions">
           {versions.length ? (

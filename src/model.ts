@@ -89,6 +89,7 @@ export type WebviewMessage =
   | { type: "updateMetadata"; assetId: string; displayName: string; description: string }
   | { type: "rollback"; assetId: string; versionNumber: string }
   | { type: "archive"; assetId: string; restore?: boolean }
+  | { type: "removeAssets"; ids: string[] }
   | { type: "cancelJob"; id: string };
 
 export type HostMessage =
@@ -96,4 +97,5 @@ export type HostMessage =
   | { type: "candidates"; candidates: UploadCandidate[] }
   | { type: "assetDetails"; asset: AssetSummary }
   | { type: "assetVersions"; assetId: string; versions: unknown[] }
+  | { type: "assetsRemoved"; ids: string[] }
   | { type: "notice"; level: "info" | "error"; message: string };

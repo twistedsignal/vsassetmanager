@@ -276,12 +276,12 @@ button:disabled {
   color: var(--vscode-inputValidation-errorForeground);
 }
 .asset-list {
-  min-width: 560px;
+  min-width: 0;
 }
 .list-head,
 .asset-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 120px 110px 30px;
+  grid-template-columns: minmax(150px, 1fr) minmax(72px, 110px) minmax(90px, 180px) 30px;
   align-items: center;
 }
 .list-head {
@@ -374,6 +374,10 @@ button:disabled {
   text-overflow: ellipsis;
 }
 .asset-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   justify-content: flex-start;
   padding: 4px;
   background: transparent;
@@ -621,6 +625,10 @@ button:disabled {
   border-radius: 4px;
 }
 .detail-id code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: "Geist Mono", "SF Mono", monospace;
 }
 .details dl {
@@ -649,6 +657,19 @@ button:disabled {
 }
 .danger {
   background: transparent;
+  color: var(--vscode-errorForeground);
+  border-color: var(--vscode-inputValidation-errorBorder);
+}
+.details > .remove-index {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 7px;
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--line);
+}
+.details > .remove-index:hover {
   color: var(--vscode-errorForeground);
   border-color: var(--vscode-inputValidation-errorBorder);
 }

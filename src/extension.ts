@@ -189,6 +189,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
         await this.rollback(message.assetId, message.versionNumber);
       else if (message.type === "archive")
         await this.archive(message.assetId, Boolean(message.restore));
+      else if (message.type === "removeAssets") await this.removeAssets(message.ids);
       else if (message.type === "cancelJob") {
         this.controllers.get(message.id)?.abort();
         this.setJob(message.id, { status: "cancelled" });
@@ -718,6 +719,21 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
     await client.archive(assetId, restore);
     await this.history.markArchived(assetId, !restore);
     await this.refresh();
+  }
+
+  private async removeAssets(ids: string[]): Promise<void> {
+    const assetIds = [...new Set(ids.filter((id) => /^\d+$/.test(id)))];
+    if (!assetIds.length) return;
+    const label = assetIds.length === 1 ? "this asset" : `${assetIds.length} assets`;
+    const answer = await vscode.window.showWarningMessage(
+      `Remove ${label} from the tracked index? This does not change anything on Roblox.`,
+      { modal: true },
+      "Remove from index",
+    );
+    if (answer !== "Remove from index") return;
+    await this.history.remove(assetIds);
+    await this.post({ type: "assetsRemoved", ids: assetIds });
+    await this.sendState();
   }
 
   async exportIndex(): Promise<void> {

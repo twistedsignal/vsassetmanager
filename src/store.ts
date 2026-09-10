@@ -86,6 +86,19 @@ export class HistoryStore {
       await this.upsert(asset);
     }
   }
+  async remove(assetIds: string[]): Promise<void> {
+    const removed = new Set(assetIds);
+    await this.serialized(async () => {
+      const local = await this.readFile(this.file);
+      local.assets = local.assets.filter((asset) => !removed.has(asset.assetId));
+      await this.writeLocal(local);
+      if (this.manifestUri()) {
+        const manifest = await this.readManifest();
+        manifest.assets = manifest.assets.filter((asset) => !removed.has(asset.assetId));
+        await this.writeManifest(manifest);
+      }
+    });
+  }
   private async writeLocal(index: UploadIndex): Promise<void> {
     await fs.mkdir(this.context.globalStorageUri.fsPath, { recursive: true });
     const temp = `${this.file}.tmp`;
