@@ -60,6 +60,7 @@ export type ExtensionState = {
   history: AssetSummary[];
   jobs: UploadJob[];
   manifestPath?: string;
+  copyFormat: { format: string; customTemplate: string };
   loading: boolean;
   isRojoProject: boolean;
   error?: string;

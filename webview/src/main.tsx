@@ -42,6 +42,7 @@ const empty: ExtensionState = {
   profiles: [],
   history: [],
   jobs: [],
+  copyFormat: { format: "uri", customTemplate: "rbxassetid://${id}" },
   loading: false,
   isRojoProject: false,
 };
@@ -291,6 +292,7 @@ function App() {
               key={asset.assetId}
               asset={asset}
               selected={selected.has(asset.assetId)}
+              displayId={formatId(asset.assetId, state.copyFormat)}
               onToggle={() => toggle(asset.assetId)}
               onOpen={() => {
                 setDetails(asset);
@@ -319,6 +321,7 @@ function App() {
       {details && (
         <Details
           asset={details}
+          displayId={formatId(details.assetId, state.copyFormat)}
           versions={versions}
           onClose={() => {
             setDetails(undefined);
@@ -348,11 +351,13 @@ function Welcome() {
 }
 function AssetRow({
   asset,
+  displayId,
   selected,
   onToggle,
   onOpen,
 }: {
   asset: AssetSummary;
+  displayId: string;
   selected: boolean;
   onToggle(): void;
   onOpen(): void;
@@ -374,7 +379,7 @@ function AssetRow({
         className="asset-id"
         onClick={() => vscode.postMessage({ type: "copy", ids: [asset.assetId] })}
       >
-        {asset.assetId}
+        {displayId}
       </button>
       <button className="icon-button row-menu" title="Details" onClick={onOpen}>
         <DotsThree size={18} weight="bold" />
@@ -569,10 +574,12 @@ function UploadReview({
 }
 function Details({
   asset,
+  displayId,
   versions,
   onClose,
 }: {
   asset: AssetSummary;
+  displayId: string;
   versions?: unknown[];
   onClose(): void;
 }) {
@@ -606,7 +613,7 @@ function Details({
         {asset.thumbnailUrl ? <img src={asset.thumbnailUrl} alt="" /> : <Thumbnail asset={asset} />}
       </div>
       <div className="detail-id">
-        <code>{asset.assetId}</code>
+        <code>{displayId}</code>
         <button
           className="icon-button"
           onClick={() => vscode.postMessage({ type: "copy", ids: [asset.assetId] })}
@@ -711,6 +718,15 @@ function keyFor(c: CreatorTarget) {
 }
 function sameCreator(a: CreatorTarget | undefined, b: CreatorTarget) {
   return Boolean(a && a.kind === b.kind && a.id === b.id);
+}
+
+function formatId(id: string, setting: { format: string; customTemplate: string }): string {
+  if (setting.format === "numeric") return id;
+  if (setting.format === "lua") return `"rbxassetid://${id}"`;
+  if (setting.format === "custom" && setting.customTemplate.includes("${id}")) {
+    return setting.customTemplate.replace("${id}", id);
+  }
+  return `rbxassetid://${id}`;
 }
 function cleanType(v?: string) {
   return (v || "Asset")

@@ -85,6 +85,11 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   constructor(private readonly context: vscode.ExtensionContext) {
     this.profiles = new ProfileStore(context);
     this.history = new HistoryStore(context);
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration("robloxAssetManager.copy")) void this.sendState();
+      }),
+    );
     const manifest = this.history.manifestUri();
     if (manifest) {
       const watcher = vscode.workspace.createFileSystemWatcher(
@@ -709,6 +714,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   private async state(): Promise<ExtensionState> {
     const profile = this.profiles.active();
     const index = await this.history.read();
+    const copy = vscode.workspace.getConfiguration("robloxAssetManager.copy");
     return {
       configured: Boolean(profile),
       profile,
@@ -723,6 +729,10 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       ),
       jobs: this.jobs,
       manifestPath: this.history.manifestUri()?.fsPath,
+      copyFormat: {
+        format: copy.get("format", "uri"),
+        customTemplate: copy.get("customTemplate", "rbxassetid://${id}"),
+      },
       loading: this.loading,
       isRojoProject: this.isRojoProject,
       error: this.error,
