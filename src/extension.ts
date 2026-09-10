@@ -167,6 +167,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       if (message.type === "ready") await this.sendState();
       else if (message.type === "configure") await this.configure();
       else if (message.type === "manageCreators") await this.manageCreators();
+      else if (message.type === "removeCreator") await this.removeCreator(message.creator);
       else if (message.type === "addExistingIds") await this.addExistingIds(message.creator);
       else if (message.type === "switchProfile") await this.switchProfile();
       else if (message.type === "refresh") await this.refresh();
@@ -223,18 +224,24 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       ignoreFocusOut: true,
     });
     if (!key) return;
+    const client = new RobloxClient(key);
     await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: "Validating Roblox API key…" },
       async () => {
-        await new RobloxClient(key).validate(userId);
+        await client.validate(userId);
       },
     );
-    const user: CreatorTarget = { kind: "user", id: userId, label: `${label} (${userId})` };
-    const groups = groupText
+    const user = await client.resolveCreator({
+      kind: "user",
+      id: userId,
+      label: `${label} (${userId})`,
+    });
+    const groupTargets = groupText
       .split(",")
       .map((x) => x.trim())
       .filter(Boolean)
       .map((id) => ({ kind: "group" as const, id, label: `Group ${id}` }));
+    const groups = await this.validateGroups(client, groupTargets);
     await this.profiles.save(
       {
         id: crypto.randomUUID(),
@@ -283,13 +290,45 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       id: profile.userId,
       label: `${profile.label} (${profile.userId})`,
     };
-    const groups = groupText
+    const groupTargets = groupText
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean)
       .map((id) => ({ kind: "group" as const, id, label: `Group ${id}` }));
+    const groups = await this.validateGroups(new RobloxClient(key), groupTargets);
     await this.profiles.save({ ...profile, creators: [user, ...groups] }, key);
     await this.refresh();
+  }
+
+  async removeCreator(creator: CreatorTarget): Promise<void> {
+    if (creator.kind !== "group") return;
+    const profile = this.profiles.active();
+    if (!profile) return;
+    const answer = await vscode.window.showWarningMessage(
+      `Remove ${creator.label} from this profile?`,
+      { modal: true },
+      "Remove",
+    );
+    if (answer !== "Remove") return;
+    const key = await this.profiles.key(profile.id);
+    if (!key) throw new Error(`The API key for ${profile.label} is missing.`);
+    const creators = profile.creators.filter((item) => !sameCreatorTarget(item, creator));
+    const defaultCreator = sameCreatorTarget(profile.defaultCreator, creator)
+      ? creators[0]!
+      : profile.defaultCreator;
+    await this.profiles.save({ ...profile, creators, defaultCreator }, key);
+    await this.sendState();
+  }
+
+  private async validateGroups(
+    client: RobloxClient,
+    groups: CreatorTarget[],
+  ): Promise<CreatorTarget[]> {
+    if (!groups.length) return [];
+    return vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: "Checking Roblox groups…" },
+      () => Promise.all(groups.map((group) => client.resolveCreator(group))),
+    );
   }
 
   private async client(): Promise<{

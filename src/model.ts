@@ -70,6 +70,7 @@ export type WebviewMessage =
   | { type: "ready" }
   | { type: "configure" }
   | { type: "manageCreators" }
+  | { type: "removeCreator"; creator: CreatorTarget }
   | { type: "addExistingIds"; creator?: CreatorTarget }
   | { type: "switchProfile" }
   | { type: "refresh" }

@@ -44,4 +44,15 @@ describe("RobloxClient creator identity", () => {
       thumbnailUrl: "https://tr.rbxcdn.com/example.png",
     });
   });
+
+  it("rejects a group that neither group endpoint can resolve", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("Not found", { status: 404 })),
+    );
+
+    await expect(
+      new RobloxClient("secret").resolveCreator({ kind: "group", id: "999", label: "Group 999" }),
+    ).rejects.toThrow("does not exist or is unavailable");
+  });
 });

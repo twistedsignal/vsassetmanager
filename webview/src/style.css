@@ -108,6 +108,32 @@ button:disabled {
   padding: 6px;
   border: 0;
 }
+.repo {
+  display: flex;
+  padding: 0;
+}
+.repo-select {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 6px;
+}
+.repo-select:hover {
+  background: transparent;
+}
+.repo-remove {
+  flex: 0 0 28px;
+  opacity: 0;
+}
+.repo:hover .repo-remove,
+.repo-remove:focus-visible {
+  opacity: 1;
+}
 .repo:hover,
 .folder-tree button:hover,
 .account:hover {

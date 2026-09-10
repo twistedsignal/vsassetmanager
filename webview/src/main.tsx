@@ -21,6 +21,7 @@ import {
   Queue,
   Rows,
   SlidersHorizontal,
+  Trash,
   User,
   Users,
   X,
@@ -156,28 +157,39 @@ function App() {
             );
             const count = creatorIds.size;
             return (
-              <div key={keyFor(creator)}>
-                <button
-                  className={`repo ${active ? "active" : ""}`}
-                  onClick={() => {
-                    setCreatorKey(keyFor(creator));
-                    setFolder("all");
-                    setSelected(new Set());
-                  }}
-                >
-                  {active ? (
-                    <CaretDown size={13} weight="bold" />
-                  ) : (
-                    <CaretRight size={13} weight="bold" />
+              <div className="repo-entry" key={keyFor(creator)}>
+                <div className={`repo ${active ? "active" : ""}`}>
+                  <button
+                    className="repo-select"
+                    onClick={() => {
+                      setCreatorKey(keyFor(creator));
+                      setFolder("all");
+                      setSelected(new Set());
+                    }}
+                  >
+                    {active ? (
+                      <CaretDown size={13} weight="bold" />
+                    ) : (
+                      <CaretRight size={13} weight="bold" />
+                    )}
+                    {creator.kind === "group" ? (
+                      <Users size={16} weight="fill" />
+                    ) : (
+                      <User size={16} weight="fill" />
+                    )}
+                    <span>{creator.label}</span>
+                    <small>{count}</small>
+                  </button>
+                  {creator.kind === "group" && (
+                    <button
+                      className="icon-button repo-remove"
+                      title={`Remove ${creator.label}`}
+                      onClick={() => vscode.postMessage({ type: "removeCreator", creator })}
+                    >
+                      <Trash size={14} />
+                    </button>
                   )}
-                  {creator.kind === "group" ? (
-                    <Users size={16} weight="fill" />
-                  ) : (
-                    <User size={16} weight="fill" />
-                  )}
-                  <span>{creator.label}</span>
-                  <small>{count}</small>
-                </button>
+                </div>
                 {active && (
                   <div className="folder-tree">
                     {folders.map((item) => (

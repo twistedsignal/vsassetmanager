@@ -51,9 +51,9 @@ export class RobloxClient {
       const name = value.displayName?.trim();
       if (name) return { ...creator, label: name };
     } catch {
-      /* Keep the configured fallback label. */
+      /* Report one clear lookup error below. */
     }
-    return creator;
+    throw new RobloxApiError(`Roblox group ${creator.id} does not exist or is unavailable.`, 404);
   }
 
   private async request<T>(url: string, init: RequestInit = {}): Promise<T> {
