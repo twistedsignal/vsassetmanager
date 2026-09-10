@@ -34,22 +34,26 @@ export class RobloxClient {
               : creator.label,
       };
     }
-    let value: { name?: string; displayName?: string };
     try {
-      value = await this.request<{ name?: string; displayName?: string }>(
+      const publicValue = await this.publicRequest<{
+        data?: Array<{ id?: number; name?: string }>;
+      }>(`https://groups.roblox.com/v2/groups?groupIds=${encodeURIComponent(creator.id)}`);
+      const name = publicValue.data?.find((group) => String(group.id) === creator.id)?.name?.trim();
+      if (name) return { ...creator, label: name };
+    } catch {
+      /* Open Cloud below is the authenticated fallback. */
+    }
+
+    try {
+      const value = await this.request<{ displayName?: string }>(
         `${API}/cloud/v2/groups/${encodeURIComponent(creator.id)}`,
       );
+      const name = value.displayName?.trim();
+      if (name) return { ...creator, label: name };
     } catch {
-      value = await this.publicRequest<{ name?: string; displayName?: string }>(
-        `https://groups.roblox.com/v1/groups/${encodeURIComponent(creator.id)}`,
-      );
+      /* Keep the configured fallback label. */
     }
-    if (!value.displayName?.trim() && !value.name?.trim()) {
-      value = await this.publicRequest<{ name?: string; displayName?: string }>(
-        `https://groups.roblox.com/v1/groups/${encodeURIComponent(creator.id)}`,
-      );
-    }
-    return { ...creator, label: value.displayName?.trim() || value.name?.trim() || creator.label };
+    return creator;
   }
 
   private async request<T>(url: string, init: RequestInit = {}): Promise<T> {
