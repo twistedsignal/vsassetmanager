@@ -44,6 +44,11 @@ export class RobloxClient {
         `https://groups.roblox.com/v1/groups/${encodeURIComponent(creator.id)}`,
       );
     }
+    if (!value.displayName?.trim() && !value.name?.trim()) {
+      value = await this.publicRequest<{ name?: string; displayName?: string }>(
+        `https://groups.roblox.com/v1/groups/${encodeURIComponent(creator.id)}`,
+      );
+    }
     return { ...creator, label: value.displayName?.trim() || value.name?.trim() || creator.label };
   }
 
@@ -98,7 +103,7 @@ export class RobloxClient {
     const value = await this.request<Record<string, unknown>>(
       `${API}/assets/v1/assets/${encodeURIComponent(assetId)}?readMask=assetType,displayName,description,creationContext,moderationResult,revisionId,revisionCreateTime`,
     );
-    const asset = this.asset(value, "history");
+    const asset = this.asset(value, "history", assetId);
     await this.addThumbnails([asset]);
     return asset;
   }
@@ -191,14 +196,14 @@ export class RobloxClient {
     );
   }
 
-  private asset(value: Record<string, unknown>, source: "history" | "manifest"): AssetSummary {
-    const assetId = String(
-      value.assetId ??
-        String(value.path ?? "")
-          .split("/")
-          .pop() ??
-        "",
-    );
+  private asset(
+    value: Record<string, unknown>,
+    source: "history" | "manifest",
+    fallbackId?: string,
+  ): AssetSummary {
+    const pathId = String(value.path ?? "").match(/(?:^|\/)assets\/(\d+)(?:\/|$)/)?.[1];
+    const assetId = String(value.assetId ?? pathId ?? fallbackId ?? "");
+    if (!/^\d+$/.test(assetId)) throw new Error("Roblox returned asset metadata without an ID.");
     const moderation = value.moderationResult as Record<string, unknown> | undefined;
     const context = value.creationContext as
       { creator?: { userId?: string; groupId?: string } } | undefined;
@@ -236,22 +241,32 @@ export class RobloxClient {
   }
 
   private async addThumbnails(assets: AssetSummary[]): Promise<void> {
-    const ids = assets.map((a) => a.assetId).filter(Boolean);
-    for (let index = 0; index < ids.length; index += 100) {
-      const batch = ids.slice(index, index + 100);
-      try {
-        const response = await fetch(
-          `https://thumbnails.roblox.com/v1/assets?assetIds=${batch.join(",")}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false`,
-        );
-        if (!response.ok) continue;
-        const value = (await response.json()) as {
-          data?: Array<{ targetId: number; imageUrl?: string }>;
-        };
-        const urls = new Map((value.data ?? []).map((x) => [String(x.targetId), x.imageUrl]));
-        for (const asset of assets) asset.thumbnailUrl = urls.get(asset.assetId);
-      } catch {
-        /* thumbnails are optional */
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const pending = assets.filter((asset) => !asset.thumbnailUrl && asset.assetId);
+      if (!pending.length) return;
+      if (attempt > 0) await wait(attempt * 750);
+      for (let index = 0; index < pending.length; index += 100) {
+        const batch = pending.slice(index, index + 100);
+        try {
+          const response = await fetch(
+            `https://thumbnails.roblox.com/v1/assets?assetIds=${batch.map((asset) => asset.assetId).join(",")}&returnPolicy=PlaceHolder&size=420x420&format=Png&isCircular=false`,
+          );
+          if (!response.ok) continue;
+          const value = (await response.json()) as {
+            data?: Array<{ targetId: number; imageUrl?: string }>;
+          };
+          const urls = new Map(
+            (value.data ?? []).map((item) => [String(item.targetId), item.imageUrl]),
+          );
+          for (const asset of batch) asset.thumbnailUrl = urls.get(asset.assetId);
+        } catch {
+          /* thumbnails are optional */
+        }
       }
     }
   }
+}
+
+function wait(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

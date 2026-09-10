@@ -55,7 +55,7 @@ export class HistoryStore {
     try {
       const value = JSON.parse(await fs.readFile(file, "utf8")) as UploadIndex;
       return value.schemaVersion === 1 && Array.isArray(value.assets)
-        ? value
+        ? { schemaVersion: 1, assets: validRecords(value.assets) }
         : { schemaVersion: 1, assets: [] };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -159,11 +159,15 @@ export class HistoryStore {
 }
 
 function mergeRecords(current: UploadRecord[], incoming: UploadRecord[]): UploadRecord[] {
-  const merged = new Map(current.map((asset) => [asset.assetId, asset]));
-  for (const asset of incoming) merged.set(asset.assetId, asset);
+  const merged = new Map(validRecords(current).map((asset) => [asset.assetId, asset]));
+  for (const asset of validRecords(incoming)) merged.set(asset.assetId, asset);
   return [...merged.values()].sort((left, right) =>
     String(right.updatedAt ?? right.createdAt ?? "").localeCompare(
       String(left.updatedAt ?? left.createdAt ?? ""),
     ),
   );
+}
+
+function validRecords(records: UploadRecord[]): UploadRecord[] {
+  return records.filter((asset) => /^\d+$/.test(asset.assetId));
 }

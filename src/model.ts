@@ -32,6 +32,7 @@ export type UploadCandidate = {
   assetType?: AssetType;
   allowedTypes: AssetType[];
   mimeType?: string;
+  previewUrl?: string;
   displayName: string;
   description: string;
   validationError?: string;

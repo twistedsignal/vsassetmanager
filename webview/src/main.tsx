@@ -517,7 +517,13 @@ function UploadReview({
         <div className="review-list">
           {items.map((item) => (
             <div className="review-row" key={item.id}>
-              <span className="file-tile">{item.fileName.split(".").pop()?.toUpperCase()}</span>
+              <span className={`file-tile ${item.previewUrl ? "preview" : ""}`}>
+                {item.previewUrl ? (
+                  <img src={item.previewUrl} alt="" />
+                ) : (
+                  item.fileName.split(".").pop()?.toUpperCase()
+                )}
+              </span>
               <div>
                 <input
                   value={item.displayName}

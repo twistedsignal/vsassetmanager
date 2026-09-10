@@ -151,7 +151,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
     const style = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, "dist", "webview", "app.css"),
     );
-    return `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"></head><body><div id="root"></div><script nonce="${nonce}" src="${script}"></script></body></html>`;
+    return `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}"></head><body><div id="root"></div><script nonce="${nonce}" src="${script}"></script></body></html>`;
   }
 
   private async onMessage(raw: unknown): Promise<void> {
@@ -340,7 +340,14 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       for (const record of known) {
         try {
           const details = await client.details(record.assetId);
-          refreshed.push({ ...record, ...details, creator: record.creator, source: record.source });
+          refreshed.push({
+            ...record,
+            ...details,
+            assetId: record.assetId,
+            creator: record.creator,
+            source: record.source,
+            thumbnailUrl: details.thumbnailUrl ?? record.thumbnailUrl,
+          });
         } catch (error) {
           this.output.warn(`Could not refresh asset ${record.assetId}: ${friendly(error)}`);
         }
@@ -380,15 +387,29 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   private async review(uris: vscode.Uri[]): Promise<void> {
     const config = vscode.workspace.getConfiguration("robloxAssetManager.upload");
     const items = await Promise.all(
-      uris.map(async (uri) =>
-        candidateFor(
+      uris.map(async (uri) => {
+        const candidate = candidateFor(
           uri.fsPath,
           (await vscode.workspace.fs.stat(uri)).size,
           config.get("defaultImageType", "Decal"),
           config.get("defaultDescription", ""),
-        ),
-      ),
+        );
+        if (candidate.mimeType?.startsWith("image/") && this.view) {
+          candidate.previewUrl = this.view.webview.asWebviewUri(uri).toString();
+        }
+        return candidate;
+      }),
     );
+    if (this.view) {
+      const roots = uris.map((uri) => vscode.Uri.file(path.dirname(uri.fsPath)));
+      this.view.webview.options = {
+        ...this.view.webview.options,
+        localResourceRoots: [
+          vscode.Uri.joinPath(this.context.extensionUri, "dist", "webview"),
+          ...roots,
+        ],
+      };
+    }
     this.candidates = new Map(items.map((item) => [item.id, item]));
     await vscode.commands.executeCommand("workbench.view.extension.robloxAssetManager");
     await this.post({ type: "candidates", candidates: items });
@@ -587,14 +608,25 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
 
   private async details(assetId: string): Promise<void> {
     const { client, profile } = await this.client();
-    const asset = await client.details(assetId);
     const current = (await this.history.read()).assets.find((item) => item.assetId === assetId);
+    let asset: AssetSummary;
+    try {
+      asset = await client.details(assetId);
+    } catch (error) {
+      if (error instanceof RobloxApiError && error.status === 404 && current) {
+        await this.post({ type: "assetDetails", asset: current });
+        return;
+      }
+      throw error;
+    }
     const record: UploadRecord = {
       ...current,
       ...asset,
+      assetId,
       creator: current?.creator ?? asset.creator,
       profileId: current?.profileId ?? profile.id,
       source: current?.source ?? "history",
+      thumbnailUrl: asset.thumbnailUrl ?? current?.thumbnailUrl,
     };
     await this.history.upsert(record);
     await this.post({ type: "assetDetails", asset: record });
