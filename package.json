@@ -97,6 +97,11 @@
         "command": "robloxAssetManager.importIndex",
         "title": "Import Upload Index",
         "category": "Roblox Assets"
+      },
+      {
+        "command": "robloxAssetManager.openManifest",
+        "title": "Open Shared Manifest",
+        "category": "Roblox Assets"
       }
     ],
     "viewsContainers": {
@@ -218,12 +223,22 @@
           "default": 420,
           "description": "Requested Roblox thumbnail size."
         },
-        "robloxAssetManager.library.pageSize": {
+        "robloxAssetManager.library.refreshIntervalMinutes": {
           "type": "integer",
-          "minimum": 10,
-          "maximum": 100,
-          "default": 50,
-          "description": "Inventory items loaded per page."
+          "minimum": 0,
+          "maximum": 1440,
+          "default": 15,
+          "description": "Minutes between metadata refreshes while the Asset Manager is open. Set to 0 to disable."
+        },
+        "robloxAssetManager.manifest.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep a shareable asset manifest in the workspace."
+        },
+        "robloxAssetManager.manifest.path": {
+          "type": "string",
+          "default": ".roblox-assets.json",
+          "description": "Manifest path relative to the first workspace folder."
         },
         "robloxAssetManager.library.defaultSort": {
           "type": "string",

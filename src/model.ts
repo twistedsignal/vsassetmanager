@@ -20,7 +20,7 @@ export type AssetSummary = {
   createdAt?: string;
   updatedAt?: string;
   thumbnailUrl?: string;
-  source: "inventory" | "history" | "creator";
+  source: "history" | "manifest";
   archived?: boolean;
 };
 
@@ -57,10 +57,8 @@ export type ExtensionState = {
   profile?: Omit<CredentialProfile, "creators"> & { creators: CreatorTarget[] };
   profiles: Array<{ id: string; label: string }>;
   history: AssetSummary[];
-  inventory: AssetSummary[];
-  creatorAssets: AssetSummary[];
   jobs: UploadJob[];
-  inventoryNextPageToken?: string;
+  manifestPath?: string;
   loading: boolean;
   isRojoProject: boolean;
   error?: string;
@@ -73,7 +71,7 @@ export type WebviewMessage =
   | { type: "addExistingIds"; creator?: CreatorTarget }
   | { type: "switchProfile" }
   | { type: "refresh" }
-  | { type: "loadMore" }
+  | { type: "openManifest" }
   | { type: "pickFiles" }
   | { type: "pickFolder" }
   | {

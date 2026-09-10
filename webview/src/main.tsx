@@ -41,8 +41,6 @@ const empty: ExtensionState = {
   configured: false,
   profiles: [],
   history: [],
-  inventory: [],
-  creatorAssets: [],
   jobs: [],
   loading: false,
   isRojoProject: false,
@@ -93,17 +91,8 @@ function App() {
   }, [creatorKey, creators]);
   const repositoryAssets = useMemo(() => {
     if (!activeCreator) return [];
-    const history = state.history.filter((a) => sameCreator(a.creator, activeCreator));
-    const discovered = state.creatorAssets.filter((a) => sameCreator(a.creator, activeCreator));
-    const inventory =
-      activeCreator.kind === "user" && activeCreator.id === state.profile?.userId
-        ? state.inventory.map((a) => ({ ...a, creator: activeCreator }))
-        : [];
-    const merged = new Map<string, AssetSummary>(inventory.map((a) => [a.assetId, a]));
-    for (const asset of discovered) merged.set(asset.assetId, asset);
-    for (const asset of history) merged.set(asset.assetId, asset);
-    return [...merged.values()];
-  }, [activeCreator, state.history, state.inventory, state.creatorAssets, state.profile?.userId]);
+    return state.history.filter((asset) => sameCreator(asset.creator, activeCreator));
+  }, [activeCreator, state.history]);
   const shown = useMemo(
     () =>
       repositoryAssets.filter((asset) => {
@@ -160,7 +149,7 @@ function App() {
           {creators.map((creator) => {
             const active = activeCreator && keyFor(activeCreator) === keyFor(creator);
             const creatorIds = new Set(
-              [...state.history, ...state.creatorAssets, ...state.inventory]
+              state.history
                 .filter((asset) => sameCreator(asset.creator, creator) && !asset.archived)
                 .map((asset) => asset.assetId),
             );
@@ -210,6 +199,12 @@ function App() {
             );
           })}
         </div>
+        {state.manifestPath && (
+          <button className="account" onClick={() => vscode.postMessage({ type: "openManifest" })}>
+            <Rows size={15} />
+            <span>Shared manifest</span>
+          </button>
+        )}
         <button className="account" onClick={() => vscode.postMessage({ type: "switchProfile" })}>
           <SlidersHorizontal size={15} />
           <span>{state.profile?.label}</span>
@@ -306,11 +301,6 @@ function App() {
           ))}
           {!shown.length && <Empty folder={folder} hasAssets={repositoryAssets.length > 0} />}
         </div>
-        {activeCreator?.kind === "user" && state.inventoryNextPageToken && (
-          <button className="load-more" onClick={() => vscode.postMessage({ type: "loadMore" })}>
-            Load more inventory
-          </button>
-        )}
       </section>
       {queueOpen && <QueuePanel state={state} onClose={() => setQueueOpen(false)} />}{" "}
       {candidates && (

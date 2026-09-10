@@ -34,59 +34,17 @@ export class RobloxClient {
               : creator.label,
       };
     }
-    const value = await this.publicRequest<{ name?: string }>(
-      `https://groups.roblox.com/v1/groups/${encodeURIComponent(creator.id)}`,
-    );
-    return { ...creator, label: value.name?.trim() || creator.label };
-  }
-
-  async creatorAssets(creator: CreatorTarget): Promise<AssetSummary[]> {
-    const categories = ["Audio", "Model", "Decal", "Plugin", "MeshPart", "Video", "FontFamily"];
-    const assets = new Map<string, AssetSummary>();
-    for (const category of categories) {
-      let pageToken: string | undefined;
-      const seenTokens = new Set<string>();
-      do {
-        const params = new URLSearchParams({
-          searchCategoryType: category,
-          maxPageSize: "100",
-          sortCategory: "CreateTime",
-          sortDirection: "Descending",
-          includeOnlyVerifiedCreators: "false",
-          searchView: "Full",
-          [`${creator.kind}Id`]: creator.id,
-        });
-        if (pageToken) params.set("pageToken", pageToken);
-        const value = await this.publicRequest<{
-          creatorStoreAssets?: Array<{
-            asset?: Record<string, unknown>;
-            creator?: { userId?: number; groupId?: number; name?: string };
-          }>;
-          nextPageToken?: string;
-        }>(`${API}/toolbox-service/v2/assets:search?${params}`);
-        for (const item of value.creatorStoreAssets ?? []) {
-          const raw = item.asset;
-          if (!raw?.id) continue;
-          const assetId = String(raw.id);
-          assets.set(assetId, {
-            assetId,
-            displayName: String(raw.name ?? `Asset ${assetId}`),
-            description: typeof raw.description === "string" ? raw.description : undefined,
-            assetType: toolboxAssetType(raw.assetTypeId, category),
-            creator,
-            createdAt: typeof raw.createTime === "string" ? raw.createTime : undefined,
-            updatedAt: typeof raw.updateTime === "string" ? raw.updateTime : undefined,
-            source: "creator",
-          });
-        }
-        pageToken = value.nextPageToken || undefined;
-        if (pageToken && seenTokens.has(pageToken)) break;
-        if (pageToken) seenTokens.add(pageToken);
-      } while (pageToken && seenTokens.size < 100);
+    let value: { name?: string; displayName?: string };
+    try {
+      value = await this.request<{ name?: string; displayName?: string }>(
+        `${API}/cloud/v2/groups/${encodeURIComponent(creator.id)}`,
+      );
+    } catch {
+      value = await this.publicRequest<{ name?: string; displayName?: string }>(
+        `https://groups.roblox.com/v1/groups/${encodeURIComponent(creator.id)}`,
+      );
     }
-    const result = [...assets.values()];
-    await this.addThumbnails(result);
-    return result;
+    return { ...creator, label: value.displayName?.trim() || value.name?.trim() || creator.label };
   }
 
   private async request<T>(url: string, init: RequestInit = {}): Promise<T> {
@@ -134,46 +92,6 @@ export class RobloxClient {
 
   async validate(userId: string): Promise<void> {
     await this.request(`${API}/cloud/v2/users/${encodeURIComponent(userId)}/asset-quotas`);
-  }
-
-  async inventory(
-    userId: string,
-    pageSize: number,
-    pageToken?: string,
-  ): Promise<{ assets: AssetSummary[]; nextPageToken?: string }> {
-    const params = new URLSearchParams({
-      maxPageSize: String(pageSize),
-      filter: "inventoryItemAssetTypes=*",
-    });
-    if (pageToken) params.set("pageToken", pageToken);
-    const value = await this.request<{
-      inventoryItems?: Array<Record<string, unknown>>;
-      nextPageToken?: string;
-    }>(`${API}/cloud/v2/users/${encodeURIComponent(userId)}/inventory-items?${params}`);
-    const rows = value.inventoryItems ?? [];
-    const assets = rows
-      .map((item) => this.inventoryItem(item))
-      .filter((item): item is AssetSummary => Boolean(item));
-    await this.addThumbnails(assets);
-    return { assets, nextPageToken: value.nextPageToken || undefined };
-  }
-
-  private inventoryItem(item: Record<string, unknown>): AssetSummary | undefined {
-    const details = (item.assetDetails ?? item) as Record<string, unknown>;
-    const rawId =
-      details.assetId ??
-      item.assetId ??
-      String(item.path ?? "")
-        .split("/")
-        .pop();
-    if (!rawId) return undefined;
-    return {
-      assetId: String(rawId),
-      displayName: String(details.displayName ?? details.name ?? `Asset ${rawId}`),
-      assetType: String(details.assetType ?? details.inventoryItemAssetType ?? ""),
-      createdAt: typeof item.createTime === "string" ? item.createTime : undefined,
-      source: "inventory",
-    };
   }
 
   async details(assetId: string): Promise<AssetSummary> {
@@ -273,10 +191,7 @@ export class RobloxClient {
     );
   }
 
-  private asset(
-    value: Record<string, unknown>,
-    source: "history" | "inventory" | "creator",
-  ): AssetSummary {
+  private asset(value: Record<string, unknown>, source: "history" | "manifest"): AssetSummary {
     const assetId = String(
       value.assetId ??
         String(value.path ?? "")
@@ -339,19 +254,4 @@ export class RobloxClient {
       }
     }
   }
-}
-
-function toolboxAssetType(value: unknown, fallback: string): string {
-  const names: Record<number, string> = {
-    1: "Image",
-    3: "Audio",
-    4: "Mesh",
-    10: "Model",
-    13: "Decal",
-    24: "Animation",
-    38: "Plugin",
-    40: "MeshPart",
-    62: "Video",
-  };
-  return typeof value === "number" ? (names[value] ?? fallback) : fallback;
 }

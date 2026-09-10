@@ -48,6 +48,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("robloxAssetManager.refresh", () => manager?.refresh()),
     vscode.commands.registerCommand("robloxAssetManager.exportIndex", () => manager?.exportIndex()),
     vscode.commands.registerCommand("robloxAssetManager.importIndex", () => manager?.importIndex()),
+    vscode.commands.registerCommand("robloxAssetManager.openManifest", () =>
+      manager?.openManifest(),
+    ),
   );
   await detectRojo();
 }
@@ -67,14 +70,12 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   private view?: vscode.WebviewView;
   private readonly profiles: ProfileStore;
   private readonly history: HistoryStore;
-  private inventory: AssetSummary[] = [];
-  private creatorAssets: AssetSummary[] = [];
   private jobs: UploadJob[] = [];
-  private nextPageToken?: string;
   private candidates = new Map<string, UploadCandidate>();
   private controllers = new Map<string, AbortController>();
   private loading = false;
   private hasLoaded = false;
+  private refreshTimer?: NodeJS.Timeout;
   private error?: string;
   private isRojoProject = false;
   private readonly output = vscode.window.createOutputChannel("Roblox Asset Manager", {
@@ -84,6 +85,19 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   constructor(private readonly context: vscode.ExtensionContext) {
     this.profiles = new ProfileStore(context);
     this.history = new HistoryStore(context);
+    const manifest = this.history.manifestUri();
+    if (manifest) {
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(
+          vscode.Uri.file(path.dirname(manifest.fsPath)),
+          path.basename(manifest.fsPath),
+        ),
+      );
+      watcher.onDidCreate(() => void this.sendState());
+      watcher.onDidChange(() => void this.sendState());
+      watcher.onDidDelete(() => void this.sendState());
+      context.subscriptions.push(watcher);
+    }
     void detectRojo().then((found) => {
       this.isRojoProject = found;
       void this.sendState();
@@ -92,6 +106,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
 
   dispose(): void {
     for (const controller of this.controllers.values()) controller.abort();
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
     this.output.dispose();
   }
 
@@ -108,9 +123,23 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       this.context.subscriptions,
     );
     await this.sendState();
+    this.startRefreshTimer();
     if (this.profiles.active() && !this.hasLoaded) {
       this.hasLoaded = true;
       void this.refresh().catch((error) => this.fail(error));
+    }
+  }
+
+  private startRefreshTimer(): void {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    const minutes = vscode.workspace
+      .getConfiguration("robloxAssetManager.library")
+      .get("refreshIntervalMinutes", 15);
+    if (minutes > 0) {
+      this.refreshTimer = setInterval(
+        () => void this.refresh().catch((error) => this.fail(error)),
+        minutes * 60_000,
+      );
     }
   }
 
@@ -136,7 +165,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       else if (message.type === "addExistingIds") await this.addExistingIds(message.creator);
       else if (message.type === "switchProfile") await this.switchProfile();
       else if (message.type === "refresh") await this.refresh();
-      else if (message.type === "loadMore") await this.loadInventory(true);
+      else if (message.type === "openManifest") await this.openManifest();
       else if (message.type === "pickFiles") await this.pickFiles();
       else if (message.type === "pickFolder") await this.pickFolder();
       else if (message.type === "submitUpload")
@@ -212,9 +241,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       },
       key,
     );
-    this.inventory = [];
-    this.creatorAssets = [];
-    this.nextPageToken = undefined;
+    this.startRefreshTimer();
     await this.refresh();
   }
 
@@ -227,9 +254,6 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
     );
     if (!picked) return;
     await this.profiles.activate(picked.profile.id);
-    this.inventory = [];
-    this.creatorAssets = [];
-    this.nextPageToken = undefined;
     await this.refresh();
   }
 
@@ -276,6 +300,7 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   async refresh(): Promise<void> {
+    if (this.loading) return;
     this.loading = true;
     this.error = undefined;
     await this.sendState();
@@ -304,52 +329,27 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
         }
       }
 
-      this.inventory = [];
-      this.nextPageToken = undefined;
-      try {
-        await this.loadInventory(false);
-      } catch (error) {
-        this.output.warn(`Inventory lookup failed: ${friendly(error)}`);
-      }
-
-      const discovered = await Promise.all(
-        resolvedCreators.map(async (creator) => {
-          try {
-            return await client.creatorAssets(creator);
-          } catch (error) {
-            this.output.warn(
-              `Creator asset lookup failed for ${creator.label}: ${friendly(error)}`,
-            );
-            return [];
-          }
-        }),
+      const index = await this.history.read();
+      const known = index.assets.filter((asset) =>
+        asset.creator
+          ? resolvedCreators.some((creator) => sameCreatorTarget(creator, asset.creator!))
+          : asset.profileId === profile.id,
       );
-      this.creatorAssets = discovered.flat();
+      await this.history.syncManifest(known);
+      const refreshed: UploadRecord[] = [];
+      for (const record of known) {
+        try {
+          const details = await client.details(record.assetId);
+          refreshed.push({ ...record, ...details, creator: record.creator, source: record.source });
+        } catch (error) {
+          this.output.warn(`Could not refresh asset ${record.assetId}: ${friendly(error)}`);
+        }
+      }
+      if (refreshed.length) await this.history.upsertMany(refreshed);
     } finally {
       this.loading = false;
       await this.sendState();
     }
-  }
-
-  private async loadInventory(append: boolean): Promise<void> {
-    const { client, profile } = await this.client();
-    if (append && !this.nextPageToken) return;
-    const config = vscode.workspace.getConfiguration("robloxAssetManager.library");
-    const result = await client.inventory(
-      profile.userId,
-      config.get("pageSize", 50),
-      append ? this.nextPageToken : undefined,
-    );
-    const userCreator = profile.creators.find(
-      (creator) => creator.kind === "user" && creator.id === profile.userId,
-    );
-    if (userCreator) {
-      for (const asset of result.assets) asset.creator = userCreator;
-    }
-    const merged = append ? [...this.inventory, ...result.assets] : result.assets;
-    this.inventory = [...new Map(merged.map((asset) => [asset.assetId, asset])).values()];
-    this.nextPageToken = result.nextPageToken;
-    await this.sendState();
   }
 
   async pickFiles(initial?: vscode.Uri[]): Promise<void> {
@@ -586,12 +586,19 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
   }
 
   private async details(assetId: string): Promise<void> {
-    const { client } = await this.client();
+    const { client, profile } = await this.client();
     const asset = await client.details(assetId);
-    asset.archived = (await this.history.read()).assets.find(
-      (item) => item.assetId === assetId,
-    )?.archived;
-    await this.post({ type: "assetDetails", asset });
+    const current = (await this.history.read()).assets.find((item) => item.assetId === assetId);
+    const record: UploadRecord = {
+      ...current,
+      ...asset,
+      creator: current?.creator ?? asset.creator,
+      profileId: current?.profileId ?? profile.id,
+      source: current?.source ?? "history",
+    };
+    await this.history.upsert(record);
+    await this.post({ type: "assetDetails", asset: record });
+    await this.sendState();
   }
   private async versions(assetId: string): Promise<void> {
     const { client } = await this.client();
@@ -656,6 +663,17 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
     }
   }
 
+  async openManifest(): Promise<void> {
+    const uri = this.history.manifestUri();
+    if (!uri) throw new Error("Open a folder and enable the shared manifest first.");
+    try {
+      await vscode.workspace.fs.stat(uri);
+    } catch {
+      await this.history.syncManifest([]);
+    }
+    await vscode.window.showTextDocument(uri);
+  }
+
   private async state(): Promise<ExtensionState> {
     const profile = this.profiles.active();
     const index = await this.history.read();
@@ -663,11 +681,16 @@ class AssetManager implements vscode.WebviewViewProvider, vscode.Disposable {
       configured: Boolean(profile),
       profile,
       profiles: this.profiles.profiles().map((p) => ({ id: p.id, label: p.label })),
-      history: index.assets,
-      inventory: this.inventory,
-      creatorAssets: this.creatorAssets,
+      history: index.assets.filter(
+        (asset) =>
+          asset.profileId === profile?.id ||
+          Boolean(
+            asset.creator &&
+            profile?.creators.some((creator) => sameCreatorTarget(creator, asset.creator!)),
+          ),
+      ),
       jobs: this.jobs,
-      inventoryNextPageToken: this.nextPageToken,
+      manifestPath: this.history.manifestUri()?.fsPath,
       loading: this.loading,
       isRojoProject: this.isRojoProject,
       error: this.error,

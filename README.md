@@ -4,7 +4,7 @@ A thumbnail-first Roblox asset manager for VS Code. It is designed around Rojo w
 
 ## What works
 
-- Browse assets in a repository-style explorer, with Roblox usernames and group names resolved automatically.
+- Browse tracked assets in a repository-style explorer, with Roblox usernames and group names resolved automatically.
 - Filter each creator by images, audio, models, animations, video, and archived assets.
 - Bulk upload images, audio, video, models, and animations supported by Roblox Open Cloud.
 - Publish to a user or configured group.
@@ -12,16 +12,19 @@ A thumbnail-first Roblox asset manager for VS Code. It is designed around Rojo w
 - Track upload and processing states, cancel queued work, and retry transient failures.
 - Copy numeric IDs, `rbxassetid://` URIs, Lua strings, or a custom template.
 - Read and edit metadata, inspect versions, roll back, archive, and restore through supported APIs.
-- Import or export the non-secret local upload index.
+- Share a `.roblox-assets.json` manifest with the rest of the repository.
+- Import or export an asset index.
 
-The extension refreshes automatically and merges three sources: user inventory, creator-filtered Creator Store searches, and its upload index. This finds existing public decals, models, meshes, audio, plugins, videos, fonts, avatar items, and anything uploaded through the extension.
+The extension indexes every successful upload. **Add IDs** can backfill assets created in Studio or Creator Dashboard. Refresh updates the metadata and thumbnails for known IDs. It does not mix avatar inventory or Creator Store results into the library.
 
-Roblox does not expose the complete private Development Items list used by Creator Dashboard and Studio through Open Cloud. Private assets that are absent from both Inventory and Creator Store search cannot be discovered by creator ID alone. Use **Add IDs** to index those assets. The extension never reads browser cookies or undocumented Roblox sessions.
+When a workspace is open, the extension creates `.roblox-assets.json` and keeps it in sync with uploads, added IDs, imports, metadata refreshes, and archive changes. Commit that file so everyone working in the repository gets the same asset index. The manifest contains no API keys. Source paths are workspace-relative.
+
+Roblox does not expose the complete private Development Items list used by Creator Dashboard and Studio through Open Cloud. Unknown historical assets cannot be discovered by creator ID alone. The extension never reads browser cookies or undocumented Roblox sessions.
 
 ## Setup
 
 1. Create an Open Cloud API key in the [Roblox Creator Dashboard](https://create.roblox.com/dashboard/credentials).
-2. Give it the asset read/write and inventory read permissions needed for the features you use. Restrict the key to the intended creator resources and IP addresses.
+2. Give it the asset read/write permissions needed for the features you use. Restrict the key to the intended creator resources and IP addresses.
 3. Open the Roblox Assets sidebar and choose **Configure API key**.
 4. Enter your numeric user ID, optional group IDs, and the key.
 
